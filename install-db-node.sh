@@ -120,6 +120,19 @@ FLUSH PRIVILEGES;
 SQL
 }
 
+configure_phpmyadmin() {
+  msg_header "UI Deployment: phpMyAdmin"
+  cat >/etc/apache2/conf-available/phpmyadmin.conf <<APACHE
+Alias /${PMA_ALIAS} /usr/share/phpmyadmin
+<Directory /usr/share/phpmyadmin>
+    Options SymLinksIfOwnerMatch
+    DirectoryIndex index.php
+    Require all granted
+</Directory>
+APACHE
+  a2enconf phpmyadmin >/dev/null 2>&1 || true
+}
+
 deploy_agent() {
   msg_header "Deploying Agent API v5.0"
   mkdir -p "$AGENT_ROOT"
