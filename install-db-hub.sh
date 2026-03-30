@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# DB-Shield SaaS HUB v5.0 (Enterprise Automation Edition)
+# DB-Shield SaaS HUB v5.0 (High-End Dark Edition)
 # Complete SaaS: Landing Page, Paystack, Brute-Force Shield, Watchdog, Resource Quotas.
-# Professional Shadcn-inspired UI.
+# Cyber-Industrial UI with high contrast and professional layout.
 
 # --- Colors & Styles ---
 CLR_RESET="\033[0m"
@@ -50,7 +50,7 @@ wizard() {
     read -p "SMTP Host [$SMTP_HOST]: " input_host; SMTP_HOST=${input_host:-$SMTP_HOST}
     read -p "SMTP User: " SMTP_USER
     read -p "SMTP Pass: " SMTP_PASS
-    echo -e "\n${CLR_BOLD}${CLR_YELLOW}Deploy Enterprise Hub v5.0? (y/n): ${CLR_RESET}"
+    echo -e "\n${CLR_BOLD}${CLR_YELLOW}Deploy Dark Hub v5.0? (y/n): ${CLR_RESET}"
     read -p "" confirm; if [[ ! "$confirm" =~ ^[Yy]$ ]]; then exit 0; fi
 }
 
@@ -61,7 +61,7 @@ install_packages() {
 }
 
 deploy_hub() {
-  msg_header "Deploying Intelligent Platform Hub"
+  msg_header "Deploying Premium Dashboard"
   mkdir -p "$HUB_ROOT"
   
   # Generate Hash now that PHP is installed
@@ -81,7 +81,7 @@ const SMTP_FROM = '__SMTP_FROM__';
 
 header("X-Frame-Options: DENY");
 header("X-Content-Type-Options: nosniff");
-header("Content-Security-Policy: default-src 'self' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com;");
+header("Content-Security-Policy: default-src 'self' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;");
 
 function e(string $v): string { return htmlspecialchars($v, ENT_QUOTES, 'UTF-8'); }
 function csrf_token(): string {
@@ -162,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($c['status'] !== 'active') { $_SESSION['error'] = "Account pending payment."; }
             else { $_SESSION['client_id'] = $c['id']; header('Location: ?view=client'); exit; }
         }
-        else { $_SESSION['error'] = "Invalid credentials."; }
+        else { $_SESSION['error'] = "Invalid access credentials."; }
         header('Location: ?view=login'); exit;
     }
 
@@ -171,8 +171,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pkg_id = (int)$_POST['package_id'];
         try {
             hub_db()->prepare("INSERT INTO clients (email, password_hash, package_id) VALUES (?,?,?)")->execute([$email, $pass, $pkg_id]);
-            $_SESSION['message'] = "Account created. Proceed to payment.";
-            header('Location: ?view=payment&email='.$email.'&pkg='.$pkg_id); exit;
+            $_SESSION['message'] = "Account created. Please login.";
+            header('Location: ?view=login'); exit;
         } catch(Exception $e) { $_SESSION['error'] = "Account already exists."; header('Location: ?view=landing'); exit; }
     }
 
@@ -217,243 +217,161 @@ $packages = $db->query("SELECT * FROM packages")->fetchAll(PDO::FETCH_ASSOC);
 $message = $_SESSION['message'] ?? ''; unset($_SESSION['message']);
 $error = $_SESSION['error'] ?? ''; unset($_SESSION['error']);
 
-?><!doctype html><html><head><meta charset="utf-8"><title>Shield Hub</title>
+?><!doctype html><html><head><meta charset="utf-8"><title>Shield Platform</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
-<script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: { sans: ['Geist', 'sans-serif'] },
-          colors: { border: 'hsl(240 5.9% 90%)', input: 'hsl(240 5.9% 90%)', ring: 'hsl(240 5.9% 10%)', background: 'hsl(0 0% 100%)', foreground: 'hsl(240 10% 3.9%)', primary: { DEFAULT: 'hsl(240 5.9% 10%)', foreground: 'hsl(0 0% 98%)' }, secondary: { DEFAULT: 'hsl(240 4.8% 95.9%)', foreground: 'hsl(240 5.9% 10%)' }, muted: { DEFAULT: 'hsl(240 4.8% 95.9%)', foreground: 'hsl(240 3.8% 46.1%)' }, accent: { DEFAULT: 'hsl(240 4.8% 95.9%)', foreground: 'hsl(240 5.9% 10%)' } }
-        }
-      }
-    }
-</script>
-<style>
-    body { font-family: 'Geist', sans-serif; }
-    .btn-primary { @apply inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2; }
-    .input-base { @apply flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50; }
-    .card-base { @apply rounded-xl border bg-card text-card-foreground shadow; }
-</style>
-</head><body class="bg-background text-foreground antialiased">
+<style> .grad { background: radial-gradient(circle at top right, #1e1b4b, #020617); } </style>
+</head><body class="bg-slate-950 text-slate-400 font-sans">
 
 <?php if ($view === 'landing'): ?>
-    <div class="relative flex min-h-screen flex-col">
-        <header class="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div class="container flex h-14 items-center max-w-7xl mx-auto px-4">
-                <div class="flex items-center space-x-2 mr-4 font-bold tracking-tighter text-xl">
-                    <i class="fa-solid fa-shield-halved text-primary"></i><span>Shield Hub</span>
-                </div>
-                <div class="flex flex-1 items-center justify-end space-x-4">
-                    <nav class="flex items-center space-x-6 text-sm font-medium">
-                        <a href="#pricing" class="transition-colors hover:text-foreground/80 text-foreground/60">Pricing</a>
-                        <a href="?view=login" class="btn-primary">Sign In</a>
-                    </nav>
-                </div>
+    <div class="grad min-h-screen">
+        <nav class="flex justify-between px-16 py-10 max-w-7xl mx-auto items-center">
+            <div class="text-3xl font-black text-white italic tracking-tighter"><i class="fa-solid fa-shield-halved text-indigo-500 mr-2"></i>SHIELD</div>
+            <div class="flex items-center space-x-10 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">
+                <a href="?view=login" class="bg-white text-black px-10 py-4 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-xl">Identity Access</a>
             </div>
-        </header>
-        <main class="flex-1">
-            <section class="container max-w-7xl mx-auto px-4 py-24 text-center space-y-8">
-                <h1 class="text-4xl font-bold tracking-tighter sm:text-5xl md:text-6xl lg:text-7xl">Secure. Scalable.<br><span class="text-muted-foreground">Databases.</span></h1>
-                <p class="mx-auto max-w-[700px] text-muted-foreground md:text-xl">High-performance MariaDB instances with real-time brute-force protection and automated cloud snapshots.</p>
-                <div class="flex justify-center space-x-4">
-                    <a href="#pricing" class="btn-primary px-8 h-11 text-base">Get Started</a>
+        </nav>
+        <main class="max-w-7xl mx-auto px-16 py-24 text-center">
+            <h1 class="text-[7rem] leading-none font-black text-white tracking-tight mb-8">Hardened<br><span class="text-indigo-500">Fleet.</span></h1>
+            <p class="text-xl max-w-2xl mx-auto mb-24 font-medium text-slate-500">Autonomous MariaDB infrastructure with real-time brute-force resistance, isolation, and cloud snapshots.</p>
+            <div id="tiers" class="grid grid-cols-1 md:grid-cols-3 gap-10 text-left">
+                <?php foreach($packages as $p): ?>
+                <div class="bg-slate-900/50 backdrop-blur-xl border border-white/5 p-12 rounded-[3.5rem] hover:border-indigo-500/40 transition-all shadow-2xl group">
+                    <h3 class="text-indigo-400 font-black uppercase tracking-[0.4em] text-[9px] mb-8"><?= e($p['name']) ?></h3>
+                    <div class="text-7xl font-black text-white mb-12 tracking-tighter group-hover:scale-105 transition-transform">$<?= round($p['price']) ?><span class="text-sm font-normal text-slate-700 ml-2">/mo</span></div>
+                    <ul class="space-y-6 mb-16 text-sm font-bold text-slate-500">
+                        <li><i class="fa-solid fa-circle-check text-indigo-500 mr-3"></i> <?= $p['db_limit'] ?> Active Databases</li>
+                        <li><i class="fa-solid fa-circle-check text-indigo-500 mr-3"></i> <?= $p['disk_quota_gb'] ?>GB NVMe Storage</li>
+                        <li><i class="fa-solid fa-circle-check text-indigo-500 mr-3"></i> Smart Global Routing</li>
+                    </ul>
+                    <a href="?view=signup&pkg=<?= $p['id'] ?>" class="block text-center bg-slate-800 text-white py-6 rounded-3xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-xl">Initialize Node</a>
                 </div>
-            </section>
-            <section id="pricing" class="container max-w-7xl mx-auto px-4 py-24 space-y-12">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <?php foreach($packages as $p): ?>
-                    <div class="card-base p-8 space-y-6 flex flex-col justify-between hover:border-foreground/20 transition-all">
-                        <div class="space-y-2">
-                            <h3 class="font-bold text-lg"><?= e($p['name']) ?></h3>
-                            <div class="text-4xl font-bold tracking-tighter">$<?= round($p['price']) ?><span class="text-sm font-normal text-muted-foreground ml-1">/mo</span></div>
-                        </div>
-                        <ul class="space-y-2 text-sm text-muted-foreground flex-1 mt-6">
-                            <li class="flex items-center"><i class="fa-solid fa-check text-primary mr-2 text-[10px]"></i> <?= $p['db_limit'] ?> Databases</li>
-                            <li class="flex items-center"><i class="fa-solid fa-check text-primary mr-2 text-[10px]"></i> <?= $p['disk_quota_gb'] ?>GB NVMe Storage</li>
-                            <li class="flex items-center"><i class="fa-solid fa-check text-primary mr-2 text-[10px]"></i> Connection Isolation</li>
-                        </ul>
-                        <a href="?view=signup&pkg=<?= $p['id'] ?>" class="btn-primary w-full mt-8">Choose Plan</a>
-                    </div>
-                    <?php endforeach; ?>
-                </div>
-            </section>
-        </main>
-    </div>
-
-<?php elseif ($view === 'login' || $view === 'signup'): ?>
-    <div class="flex min-h-screen items-center justify-center px-4 bg-slate-50/50">
-        <div class="card-base w-full max-w-[400px] p-8 space-y-6 bg-white">
-            <div class="flex flex-col space-y-2 text-center">
-                <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 mb-2">
-                    <i class="fa-solid fa-lock text-sm"></i>
-                </div>
-                <h1 class="text-2xl font-semibold tracking-tight"><?= $view === 'login' ? 'Welcome back' : 'Create an account' ?></h1>
-                <p class="text-sm text-muted-foreground"><?= $view === 'login' ? 'Enter your credentials to access your cluster' : 'Choose a secure access key' ?></p>
-            </div>
-            <?php if($error) echo "<div class='text-xs font-medium text-red-500 bg-red-50 p-3 rounded-md text-center border border-red-100'>$error</div>"; ?>
-            <form method="post" class="space-y-4">
-                <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-                <input type="hidden" name="action" value="<?= $view ?>">
-                <?php if($view === 'signup'): ?><input type="hidden" name="package_id" value="<?= $_GET['pkg'] ?? 1 ?>"><?php endif; ?>
-                <div class="space-y-2">
-                    <label class="text-sm font-medium leading-none">Identity</label>
-                    <input type="<?= $view === 'signup' ? 'email' : 'text' ?>" name="email" class="input-base" placeholder="<?= $view === 'signup' ? 'name@example.com' : 'admin' ?>" required autofocus>
-                </div>
-                <div class="space-y-2">
-                    <label class="text-sm font-medium leading-none">Access Key</label>
-                    <input type="password" name="password" class="input-base" placeholder="••••••••" required>
-                </div>
-                <button class="btn-primary w-full h-10"><?= $view === 'login' ? 'Sign In' : 'Register' ?></button>
-            </form>
-            <div class="text-center text-xs text-muted-foreground mt-4">
-                <a href="?" class="hover:underline">← Back to home</a>
-            </div>
-        </div>
-    </div>
-
-<?php elseif ($view === 'client' && $client_id): ?>
-    <div class="min-h-screen flex flex-col">
-        <header class="border-b bg-white">
-            <div class="container flex h-16 items-center max-w-7xl mx-auto px-4 justify-between">
-                <div class="flex items-center space-x-2 font-bold tracking-tighter text-xl">
-                    <i class="fa-solid fa-shield-halved"></i><span>Shield Hub</span>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <span class="text-xs text-muted-foreground font-medium mr-2">Client Portal</span>
-                    <a href="?action=logout" class="text-xs font-semibold hover:text-red-500 transition-colors">Logout</a>
-                </div>
-            </div>
-        </header>
-        <main class="flex-1 container max-w-7xl mx-auto px-4 py-12 space-y-12">
-            <div class="flex items-center justify-between">
-                <div><h2 class="text-3xl font-bold tracking-tight">Infrastructure</h2><p class="text-sm text-muted-foreground">Manage your provisioned database instances</p></div>
-                <form method="post"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><input type="hidden" name="action" value="provision">
-                <button class="btn-primary rounded-lg h-10 px-6 shadow-none">New Instance</button></form>
-            </div>
-            
-            <?php if (!empty($_SESSION['download'])): ?>
-            <div class="card-base bg-slate-950 text-white p-6 flex items-center justify-between animate-in fade-in slide-in-from-top-4">
-                <div class="space-y-1">
-                    <h3 class="font-bold text-lg">Provisioning Complete</h3>
-                    <p class="text-sm text-slate-400">Download your secure environment file now.</p>
-                </div>
-                <a href="?download=1" class="btn-primary bg-white text-black hover:bg-slate-200">Download .env</a>
-            </div>
-            <?php endif; ?>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <?php 
-                $dbs = $db->prepare("SELECT t.*, s.public_url, s.name as server_name FROM tenant_dbs t JOIN servers s ON t.server_id = s.id WHERE t.client_id = ?"); $dbs->execute([$client_id]);
-                foreach($dbs->fetchAll(PDO::FETCH_ASSOC) as $row): ?>
-                <div class="card-base flex flex-col p-6 space-y-6">
-                    <div class="flex items-center justify-between">
-                        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-900"><i class="fa-solid fa-database text-xs"></i></div>
-                        <span class="text-[10px] font-bold uppercase tracking-widest bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-100">Healthy</span>
-                    </div>
-                    <div>
-                        <h3 class="font-bold tracking-tight"><?= e($row['db_name']) ?></h3>
-                        <p class="text-[10px] text-muted-foreground font-semibold mt-1">NODE: <?= e($row['server_name']) ?> &bull; <?= $row['last_size_mb'] ?> MB</p>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2">
-                        <a href="<?= rtrim($row['public_url'], '/') ?>/phpmyadmin" target="_blank" class="btn-primary bg-slate-50 text-slate-900 border hover:bg-slate-100 shadow-none h-8 text-[10px] font-bold tracking-widest uppercase">Admin</a>
-                        <button onclick="document.getElementById('modal-ips-<?= $row['id'] ?>').classList.remove('hidden')" class="btn-primary bg-white text-slate-900 border hover:bg-slate-50 shadow-none h-8 text-[10px] font-bold tracking-widest uppercase">Firewall</button>
-                    </div>
-                </div>
-                <!-- IP Modal -->
-                <div id="modal-ips-<?= $row['id'] ?>" class="hidden fixed inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <form method="post" class="card-base bg-white w-full max-w-[450px] p-8 space-y-6">
-                        <input type="hidden" name="action" value="update_whitelist"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><input type="hidden" name="tdb_id" value="<?= $row['id'] ?>">
-                        <div class="space-y-2">
-                            <h2 class="text-xl font-bold tracking-tight uppercase">Node Guard</h2>
-                            <p class="text-xs text-muted-foreground font-medium">Whitelist specific IP addresses for <strong><?= e($row['db_name']) ?></strong></p>
-                        </div>
-                        <textarea name="ips" class="input-base h-24 p-3 font-mono text-xs" placeholder="1.2.3.4, 5.6.7.8"><?= implode(',', json_decode($row['allowed_ips'], true) ?: ['%']) ?></textarea>
-                        <div class="flex justify-end space-x-2 pt-2">
-                            <button type="button" onclick="this.closest('[id^=modal-ips]').classList.add('hidden')" class="px-4 py-2 text-xs font-bold text-muted-foreground uppercase">Cancel</button>
-                            <button class="btn-primary h-9 px-6 rounded-lg">Apply Rules</button>
-                        </div>
-                    </form></div>
                 <?php endforeach; ?>
             </div>
         </main>
     </div>
 
-<?php elseif ($view === 'admin' && $is_admin): ?>
-    <div class="min-h-screen flex flex-col">
-        <header class="border-b bg-slate-950 text-white">
-            <div class="container flex h-16 items-center max-w-7xl mx-auto px-4 justify-between">
-                <div class="flex items-center space-x-2 font-bold tracking-tighter text-xl text-white">
-                    <i class="fa-solid fa-shield-halved text-indigo-400"></i><span>Shield Hub</span>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <span class="text-xs text-slate-400 font-bold tracking-widest uppercase mr-4">Master Control</span>
-                    <a href="?action=logout" class="text-xs font-semibold hover:text-red-400">Exit Hub</a>
-                </div>
+<?php elseif ($view === 'login'): ?>
+    <div class="flex items-center justify-center min-h-screen bg-slate-950">
+        <form method="post" class="bg-slate-900/50 backdrop-blur-2xl p-16 rounded-[4rem] border border-white/5 w-full max-w-md shadow-2xl text-center">
+            <input type="hidden" name="action" value="login"><input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+            <div class="bg-indigo-600 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-10 rotate-6 shadow-xl shadow-indigo-500/20"><i class="fa-solid fa-fingerprint text-white text-3xl"></i></div>
+            <h2 class="text-3xl font-black text-white mb-10 tracking-tighter uppercase">Access Terminal</h2>
+            <?php if($error) echo "<div class='bg-red-500/10 text-red-500 text-[10px] font-black uppercase text-center p-4 rounded-2xl border border-red-500/20 mb-8 animate-pulse'>Access Restricted</div>"; ?>
+            <div class="space-y-8 text-left">
+                <div><label class="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block">Identity</label>
+                <input type="text" name="email" placeholder="ADMIN OR CLIENT EMAIL" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-bold tracking-widest" required autofocus></div>
+                <div><label class="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block">Security Token</label>
+                <input type="password" name="password" placeholder="••••••••" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-bold tracking-widest" required></div>
+                <button class="w-full bg-indigo-600 py-6 rounded-3xl text-white font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-indigo-500/20 hover:bg-indigo-500 transition-all">Unlock Environment</button>
             </div>
-        </header>
-        <main class="flex-1 container max-w-7xl mx-auto px-4 py-12 space-y-12">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <?php foreach([['Infrastructure Nodes','servers','fa-server'],['Active Accounts','clients','fa-user-group'],['Provisioned Assets','tenant_dbs','fa-database']] as $c): ?>
-                <div class="card-base p-6 flex flex-col justify-between space-y-4">
-                    <div class="flex items-center justify-between"><span class="text-[10px] font-black uppercase text-muted-foreground tracking-widest"><?= $c[0] ?></span><i class="fa-solid <?= $c[2] ?> text-muted-foreground/30 text-xs"></i></div>
-                    <div class="text-3xl font-bold tracking-tighter"><?= $db->query("SELECT COUNT(*) FROM ".$c[1])->fetchColumn() ?></div>
-                </div><?php endforeach; ?>
-            </div>
-            <div class="flex items-center justify-between border-t pt-12">
-                <h2 class="text-2xl font-bold tracking-tight">Fleet Network</h2>
-                <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="btn-primary h-9 rounded-lg px-6">Add Server Node</button>
-            </div>
-            <div class="card-base overflow-hidden">
-                <table class="w-full text-sm">
-                    <thead class="bg-slate-50 border-b">
-                        <tr><th class="px-6 py-4 text-left font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Identifier</th><th class="px-6 py-4 text-left font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Internal Host</th><th class="px-6 py-4 text-center font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Network Pulse</th></tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <?php foreach($servers as $s): ?>
-                        <tr class="hover:bg-slate-50/50">
-                            <td class="px-6 py-4 font-semibold"><?= e($s['name']) ?></td>
-                            <td class="px-6 py-4 font-mono text-xs text-muted-foreground"><?= e($s['host']) ?></td>
-                            <td class="px-6 py-4 text-center">
-                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-tighter <?= (time()-strtotime($s['last_seen']??'0') < 600) ? 'text-emerald-600 bg-emerald-50 border border-emerald-100' : 'text-red-600 bg-red-50 border border-red-100' ?>">
-                                    <?= (time()-strtotime($s['last_seen']??'0') < 600) ? '● Healthy' : '● Unreachable' ?>
-                                </span>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        </main>
+        </form>
     </div>
+
+<?php elseif ($view === 'signup'): ?>
+    <div class="flex items-center justify-center min-h-screen bg-slate-950">
+        <form method="post" class="bg-slate-900/50 backdrop-blur-2xl p-16 rounded-[4rem] border border-white/5 w-full max-w-md shadow-2xl">
+            <input type="hidden" name="action" value="signup"><input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+            <input type="hidden" name="package_id" value="<?= $_GET['pkg'] ?? 1 ?>">
+            <h2 class="text-3xl font-black text-white mb-10 tracking-tighter text-center uppercase">Register Node</h2>
+            <div class="space-y-8">
+                <input type="email" name="email" placeholder="IDENTITY@EMAIL.COM" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-bold tracking-widest" required autofocus>
+                <input type="password" name="password" placeholder="CHOOSE SECURE KEY" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-bold tracking-widest" required>
+                <button class="w-full bg-indigo-600 py-6 rounded-3xl text-white font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-indigo-500/20 hover:bg-indigo-500 transition-all">Generate Account</button>
+            </div>
+        </form>
+    </div>
+
+<?php elseif ($view === 'client' && $client_id): ?>
+    <header class="flex justify-between px-16 py-8 items-center border-b border-white/5 bg-slate-900/20 backdrop-blur-md sticky top-0 z-50">
+        <div class="text-2xl font-black text-white tracking-tighter italic">SHIELD<span class="text-indigo-500">CLOUD</span></div>
+        <div class="flex items-center space-x-10 text-[10px] font-black uppercase tracking-widest">
+            <a href="?action=logout" class="text-slate-600 hover:text-red-500 transition-colors">Terminate</a>
+        </div>
+    </header>
+    <main class="max-w-7xl mx-auto px-16 py-16 space-y-16">
+        <?php if (!empty($_SESSION['download'])): ?>
+        <div class="bg-indigo-600 p-10 rounded-[3rem] shadow-2xl flex items-center justify-between">
+            <div><h3 class="text-white font-black text-xl tracking-tighter uppercase">Vault Ready</h3><p class="text-indigo-200 text-[10px] font-black uppercase tracking-widest">Security environment file generated</p></div>
+            <a href="?download=1" class="bg-white text-indigo-600 px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl">Retrieve .env</a>
+        </div>
+        <?php endif; ?>
+        <div class="flex items-center justify-between">
+            <div><h2 class="text-5xl font-black text-white tracking-tighter">Your Cluster</h2><p class="text-slate-500 font-bold uppercase tracking-widest text-[10px] mt-2">Active Database Inventory</p></div>
+            <form method="post"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><input type="hidden" name="action" value="provision">
+            <button class="bg-indigo-600 text-white px-12 py-5 rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-2xl shadow-indigo-500/30 hover:scale-105 transition-all">Provision Instance</button></form>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+            <?php 
+            $dbs = $db->prepare("SELECT t.*, s.public_url, s.name as server_name FROM tenant_dbs t JOIN servers s ON t.server_id = s.id WHERE t.client_id = ?"); $dbs->execute([$client_id]);
+            foreach($dbs->fetchAll(PDO::FETCH_ASSOC) as $row): ?>
+            <div class="bg-slate-900/50 border border-white/5 p-10 rounded-[3rem] shadow-xl group hover:border-indigo-500/30 transition-all text-left">
+                <div class="flex items-center justify-between mb-8"><div class="bg-slate-800 p-4 rounded-3xl"><i class="fa-solid fa-database text-indigo-500 text-2xl"></i></div><span class="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center"><span class="w-2 h-2 bg-emerald-500 rounded-full mr-2 animate-ping"></span>Linked</span></div>
+                <h3 class="text-2xl font-black text-white mb-2 tracking-tight"><?= e($row['db_name']) ?></h3>
+                <p class="text-slate-600 text-[10px] font-black uppercase tracking-widest mb-10">Node: <span class="text-indigo-400"><?= e($row['server_name']) ?></span></p>
+                <div class="grid grid-cols-1 gap-4">
+                    <a href="<?= rtrim($row['public_url'], '/') ?>/phpmyadmin" target="_blank" class="bg-slate-800 text-center py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all">Admin Gateway</a>
+                    <button onclick="document.getElementById('modal-ips-<?= $row['id'] ?>').classList.remove('hidden')" class="border border-indigo-500/20 text-indigo-400 text-center py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all">Node Guard</button>
+                </div>
+            </div>
+            <div id="modal-ips-<?= $row['id'] ?>" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-8 z-50 text-left">
+                <form method="post" class="bg-slate-900 p-12 rounded-[3rem] border border-white/5 w-full max-w-lg shadow-2xl">
+                    <input type="hidden" name="action" value="update_whitelist"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><input type="hidden" name="tdb_id" value="<?= $row['id'] ?>">
+                    <h2 class="text-2xl font-black text-white mb-4 tracking-tighter uppercase text-center">Identity Firewall</h2>
+                    <p class="text-xs text-slate-500 mb-10 font-bold uppercase tracking-widest text-center italic">Restrict database access to specific IP origins</p>
+                    <textarea name="ips" class="w-full bg-slate-950 border-white/5 rounded-2xl p-6 text-white font-mono text-sm mb-10 focus:ring-indigo-500" rows="3"><?= implode(',', json_decode($row['allowed_ips'], true) ?: ['%']) ?></textarea>
+                    <div class="flex justify-end space-x-6"><button type="button" onclick="this.closest('[id^=modal-ips]').classList.add('hidden')" class="text-slate-600 font-black uppercase text-[10px] tracking-widest">Cancel</button>
+                    <button class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px]">Sync Origin Rules</button></div>
+                </form></div>
+            <?php endforeach; ?>
+        </div>
+    </main>
+
+<?php elseif ($view === 'admin' && $is_admin): ?>
+    <header class="flex justify-between px-16 py-8 items-center border-b border-white/5 bg-slate-900/20 backdrop-blur-md sticky top-0 z-50 text-white">
+        <div class="text-2xl font-black tracking-tighter italic uppercase">Master<span class="text-indigo-500">Control</span></div>
+        <div class="flex items-center space-x-10 text-[10px] font-black uppercase tracking-widest"><a href="?action=logout" class="text-slate-400 hover:text-red-500 transition-colors">Shutdown Session</a></div>
+    </header>
+    <main class="max-w-7xl mx-auto px-16 py-16 space-y-16">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <?php foreach([['Active Nodes','servers','fa-server','indigo'],['Registered Clients','clients','fa-user-group','emerald'],['Managed Assets','tenant_dbs','fa-database','amber']] as $c): ?>
+            <div class="bg-slate-900 p-10 rounded-[3rem] border border-white/5 shadow-xl text-left">
+                <div class="flex items-center justify-between mb-6"><span class="text-[10px] font-black text-slate-500 uppercase tracking-widest"><?= $c[0] ?></span><i class="fa-solid <?= $c[2] ?> text-<?= $c[3] ?>-500/20"></i></div>
+                <div class="text-5xl font-black text-white"><?= $db->query("SELECT COUNT(*) FROM ".$c[1])->fetchColumn() ?></div>
+            </div><?php endforeach; ?>
+        </div>
+        <div class="flex items-center justify-between border-t border-white/5 pt-16">
+            <h2 class="text-3xl font-black text-white tracking-tighter uppercase">Fleet Infrastructure</h2>
+            <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-500/20">Link Remote Node</button>
+        </div>
+        <div class="bg-slate-900 rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
+            <table class="min-w-full divide-y divide-white/5 text-left">
+                <thead class="bg-white/5"><tr><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Node Identifier</th><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Internal Host</th><th class="px-10 py-6 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">operational status</th></tr></thead>
+                <tbody class="divide-y divide-white/5"><?php foreach($servers as $s): ?>
+                    <tr><td class="px-10 py-8 font-black text-white text-lg tracking-tight"><?= e($s['name']) ?></td>
+                        <td class="px-10 py-8 text-xs font-bold font-mono text-slate-500 uppercase"><?= e($s['host']) ?></td>
+                        <td class="px-10 py-8 text-center"><span class="text-[10px] font-black uppercase tracking-widest <?= (time()-strtotime($s['last_seen']??'0') < 600) ? 'text-emerald-500' : 'text-red-500' ?> animate-pulse">● <?= (time()-strtotime($s['last_seen']??'0') < 600) ? 'Healthy' : 'Sync Error' ?></span></td></tr><?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </main>
 <?php endif; ?>
 
-<div id="modal-add" class="hidden fixed inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-    <form method="post" class="card-base bg-white w-full max-w-[450px] p-10 space-y-6">
+<div id="modal-add" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-8 z-50 text-left">
+    <form method="post" class="bg-slate-900 p-12 rounded-[4rem] border border-white/5 w-full max-w-lg shadow-2xl">
         <input type="hidden" name="action" value="add_server"><input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-        <div class="text-center space-y-2">
-            <h2 class="text-2xl font-bold tracking-tight uppercase">Link Infrastructure</h2>
-            <p class="text-xs text-muted-foreground font-medium">Add a new remote database node to the fleet</p>
-        </div>
-        <div class="space-y-4">
-            <input type="text" name="name" placeholder="NODE IDENTIFIER (E.G. EU-WEST-1)" class="input-base uppercase font-bold tracking-widest text-[10px]" required>
-            <input type="text" name="host" placeholder="INTERNAL IP ADDRESS" class="input-base font-mono text-xs" required>
-            <input type="password" name="agent_key" placeholder="AGENT SECURITY TOKEN" class="input-base font-mono text-xs" required>
-            <input type="text" name="public_url" placeholder="PUBLIC HTTPS URL" class="input-base font-mono text-xs" required>
-        </div>
-        <div class="flex justify-end space-x-3 pt-4">
-            <button type="button" onclick="this.closest('#modal-add').classList.add('hidden')" class="px-4 py-2 text-xs font-bold text-muted-foreground uppercase tracking-widest">Abort</button>
-            <button class="btn-primary h-10 px-8 rounded-lg">Authorize Node</button>
+        <h2 class="text-3xl font-black text-white mb-10 tracking-tighter text-center uppercase">Provision Remote Infrastructure</h2>
+        <div class="space-y-6">
+            <input type="text" name="name" placeholder="NODE LABEL" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest uppercase" required>
+            <input type="text" name="host" placeholder="INTERNAL HOST ADDRESS" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest uppercase" required>
+            <input type="password" name="agent_key" placeholder="AGENT ACCESS TOKEN" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest uppercase" required>
+            <input type="text" name="public_url" placeholder="PUBLIC ENDPOINT (HTTPS)" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest uppercase" required>
+            <div class="flex justify-end space-x-6 pt-6"><button type="button" onclick="this.closest('#modal-add').classList.add('hidden')" class="text-slate-600 font-black uppercase text-[10px] tracking-widest">Abort</button>
+            <button class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px] shadow-xl">Commit Node</button></div>
         </div>
     </form></div>
 
-<footer class="container max-w-7xl mx-auto px-4 py-24 text-center">
-    <p class="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.5em]">&copy; 2026 SHIELD CLOUD INFRASTRUCTURE &bull; V5.0 ENGINE</p>
-</footer>
+<footer class="text-center py-32 text-[10px] font-black text-slate-800 uppercase tracking-[1em]">Shield Infrastructure &bull; Version 5.0 Core</footer>
 </body></html>
 PHPHUB
 
@@ -494,14 +412,14 @@ configure_firewall() {
 
 write_summary() {
   cat > "$SUMMARY_FILE" <<EOF
-SHIELD HUB v5.0 DEPLOYED (Enterprise Professional UI)
+SHIELD HUB v5.0 DEPLOYED (Enterprise Dark UI)
 Access: http://${SITE_FQDN}/${HUB_ALIAS}
 Admin Identity: ${HUB_ADMIN_USER}
 Access Key: ${HUB_ADMIN_PASS}
 SaaS Features: ENABLED
 Security: ENTERPRISE HARDENED
 EOF
-  echo -e "\n${CLR_BOLD}${CLR_GREEN}Professional Hub Interface Active!${CLR_RESET}"
+  echo -e "\n${CLR_BOLD}${CLR_GREEN}Premium Dark Hub Interface Active!${CLR_RESET}"
   echo -e "Admin Identity: ${CLR_YELLOW}${HUB_ADMIN_USER}${CLR_RESET}"
   echo -e "Access Key:     ${CLR_YELLOW}${HUB_ADMIN_PASS}${CLR_RESET}\n"
   msg_info "Full credentials saved to: ${CLR_BOLD}${SUMMARY_FILE}${CLR_RESET}"
