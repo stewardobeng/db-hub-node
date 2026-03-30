@@ -90,10 +90,29 @@ install_packages() {
 }
 
 configure_mariadb() {
-  msg_header "Hardening Data Layer"
+  msg_header "Hardening & Tuning Data Layer"
   systemctl enable mariadb >/dev/null 2>&1; systemctl start mariadb
+
+  # Nitro Tuning for Remote Latency
+  local mem_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+  local buffer_pool_mb=$((mem_kb / 1024 / 2)) # Use 50% of RAM for DB Buffer
+
+  cat > /etc/mysql/mariadb.conf.d/99-nitro-speed.cnf <<EOF
+[mysqld]
+# Speed Optimizations
+skip-name-resolve
+thread_cache_size = 32
+query_cache_type = 1
+query_cache_size = 32M
+innodb_buffer_pool_size = ${buffer_pool_mb}M
+innodb_flush_log_at_trx_commit = 2
+innodb_log_file_size = 128M
+max_connections = 500
+EOF
+
   if [[ -f "$MARIADB_CNF" ]]; then sed -i "s/^[# ]*bind-address.*/bind-address = 0.0.0.0/" "$MARIADB_CNF"; fi
   systemctl restart mariadb
+
   mysql <<SQL
 CREATE USER IF NOT EXISTS '${PROVISIONER_DB_USER}'@'%' IDENTIFIED BY '${PROVISIONER_DB_PASS}';
 GRANT ALL PRIVILEGES ON *.* TO '${PROVISIONER_DB_USER}'@'%' WITH GRANT OPTION;
