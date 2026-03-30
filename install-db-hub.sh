@@ -36,7 +36,6 @@ SUMMARY_FILE="/root/db-hub-install-summary.txt"
 : "${SMTP_FROM:=noreply@dbshield.io}"
 
 HUB_ADMIN_PASS="$(openssl rand -base64 12 | tr -d '\n')"
-HUB_ADMIN_HASH=$(php -r "echo password_hash('$HUB_ADMIN_PASS', PASSWORD_DEFAULT);")
 CSRF_SECRET="$(openssl rand -hex 32)"
 
 wizard() {
@@ -62,6 +61,9 @@ install_packages() {
 deploy_hub() {
   msg_header "Deploying Intelligent Platform Hub"
   mkdir -p "$HUB_ROOT"
+  
+  # Generate Hash now that PHP is installed
+  HUB_ADMIN_HASH=$(php -r "echo password_hash('$HUB_ADMIN_PASS', PASSWORD_DEFAULT);")
   
   cat >"$HUB_ROOT/index.php" <<'PHPHUB'
 <?php
