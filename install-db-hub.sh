@@ -27,6 +27,7 @@ SUMMARY_FILE="/root/db-hub-install-summary.txt"
 
 # Defaults
 : "${SITE_FQDN:=_}"
+: "${HUB_ALIAS:=db-hub}"
 : "${HUB_ADMIN_USER:=admin}"
 : "${PAYSTACK_SECRET:=}"
 : "${SMTP_HOST:=smtp.gmail.com}"
