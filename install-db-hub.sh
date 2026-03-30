@@ -479,6 +479,11 @@ Alias /${HUB_ALIAS} ${HUB_ROOT}
 APACHE
   a2enconf db-hub >/dev/null 2>&1 || true
   
+  # Ensure PHP is enabled in Apache
+  local php_version=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+  a2enmod "php${php_version}" >/dev/null 2>&1 || true
+  systemctl restart apache2
+  
   # Cron for Watchdog
   (crontab -l 2>/dev/null || true; echo "*/10 * * * * curl -s http://localhost/${HUB_ALIAS}/index.php?action=watchdog >/dev/null") | crontab -
 }
