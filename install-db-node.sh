@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# DB-Shield NODE Installer (Database + Agent API)
-# High-Security Node with Automated Encrypted Cloud Sync.
+# DB-Shield NODE Installer v5.0 (Enterprise Scaling Edition)
+# High-Security Node with Resource Enforcement and Targeted Backups.
 
 # --- Colors & Styles ---
 CLR_RESET="\033[0m"
@@ -67,20 +67,14 @@ AGENT_API_KEY="$(openssl rand -hex 32)"
 MASTER_BACKUP_KEY="$(openssl rand -hex 16)"
 
 wizard() {
-    echo -e "${CLR_BOLD}${CLR_CYAN}"
-    echo "===================================================="
-    echo "       DB-Shield NODE Installation Wizard           "
-    echo "===================================================="
-    echo -e "${CLR_RESET}"
-    read -p "$(echo -e "${CLR_BOLD}Enter Hub IP (restriction) [${HUB_IP}]: ${CLR_RESET}")" input_hub
-    HUB_IP=${input_hub:-$HUB_IP}
-    read -p "$(echo -e "${CLR_BOLD}Enter Node FQDN (for SSL): ${CLR_RESET}")" input_fqdn
-    SITE_FQDN=${input_fqdn:-$SITE_FQDN}
-    read -p "$(echo -e "${CLR_BOLD}Enter SSL Email: ${CLR_RESET}")" input_email
-    LETSENCRYPT_EMAIL=${input_email:-$LETSENCRYPT_EMAIL}
-    echo -e "\n${CLR_BOLD}${CLR_YELLOW}Execute Deployment? (y/n): ${CLR_RESET}"
-    read -p "" confirm
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then exit 0; fi
+    echo -e "${CLR_BOLD}${CLR_CYAN}===================================================="
+    echo "       DB-Shield NODE v5.0: ENTERPRISE SCALING      "
+    echo -e "====================================================${CLR_RESET}"
+    read -p "Hub Restriction IP [${HUB_IP}]: " input_hub; HUB_IP=${input_hub:-$HUB_IP}
+    read -p "Node FQDN: " input_fqdn; SITE_FQDN=${input_fqdn:-$SITE_FQDN}
+    read -p "Email for SSL: " input_email; LETSENCRYPT_EMAIL=${input_email:-$LETSENCRYPT_EMAIL}
+    echo -e "\n${CLR_BOLD}${CLR_YELLOW}Deploy Node? (y/n): ${CLR_RESET}"
+    read -p "" confirm; if [[ ! "$confirm" =~ ^[Yy]$ ]]; then exit 0; fi
 }
 
 require_ubuntu() {
@@ -90,13 +84,13 @@ require_ubuntu() {
 }
 
 install_packages() {
-  msg_header "Installing Core Node Stack"
+  msg_header "Provisioning Environment"
   apt-get update >/dev/null 2>&1
   apt-get install -y apache2 mariadb-server mariadb-client php libapache2-mod-php php-cli php-mysql php-curl php-zip php-xml php-mbstring php-json phpmyadmin certbot python3-certbot-apache unzip curl openssl ufw cron rclone >/dev/null 2>&1
 }
 
 configure_mariadb() {
-  msg_header "Security Hardening: MariaDB"
+  msg_header "Hardening Data Layer"
   systemctl enable mariadb >/dev/null 2>&1; systemctl start mariadb
   if [[ -f "$MARIADB_CNF" ]]; then sed -i "s/^[# ]*bind-address.*/bind-address = 0.0.0.0/" "$MARIADB_CNF"; fi
   systemctl restart mariadb
@@ -107,21 +101,8 @@ FLUSH PRIVILEGES;
 SQL
 }
 
-configure_phpmyadmin() {
-  msg_header "UI Deployment: phpMyAdmin"
-  cat >/etc/apache2/conf-available/phpmyadmin.conf <<APACHE
-Alias /${PMA_ALIAS} /usr/share/phpmyadmin
-<Directory /usr/share/phpmyadmin>
-    Options SymLinksIfOwnerMatch
-    DirectoryIndex index.php
-    Require all granted
-</Directory>
-APACHE
-  a2enconf phpmyadmin >/dev/null 2>&1 || true
-}
-
 deploy_agent() {
-  msg_header "Deploying Agent API Bridge"
+  msg_header "Deploying Agent API v5.0"
   mkdir -p "$AGENT_ROOT"
   
   cat >"$AGENT_ROOT/agent.php" <<'PHPAGENT'
@@ -161,47 +142,57 @@ try {
             'disk' => round(((disk_total_space('/') - disk_free_space('/')) / disk_total_space('/')) * 100),
             'active_conns' => (int)$pdo->query("SHOW STATUS LIKE 'Threads_connected'")->fetch()['Value']
         ];
-    } elseif ($action === 'list_backups') {
-        if (!is_dir(BACKUP_DIR)) mkdir(BACKUP_DIR, 0700, true);
-        $files = glob(BACKUP_DIR . '/*.sql.gz.enc');
-        foreach ($files as $f) {
-            $res[] = ['name' => basename($f), 'size' => round(filesize($f)/1024/1024, 2).'MB', 'date' => date('Y-m-d H:i:s', filemtime($f))];
-        }
-        usort($res, function($a, $b) { return strcmp($b['date'], $a['date']); });
-    } elseif ($action === 'trigger_backup') {
-        $stamp = date('Ymd-His'); $file = BACKUP_DIR . "/manual-$stamp.sql.gz.enc";
-        shell_exec("mariadb-dump --all-databases --single-transaction --quick --routines --events | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:".BACKUP_KEY." -out $file");
-        @shell_exec("rclone sync ".BACKUP_DIR." remote:backup --config /root/.rclone.conf");
-        $res = ['message' => "Backup created: $stamp"];
-    } elseif ($action === 'restore') {
-        $file = BACKUP_DIR . '/' . ($_POST['filename'] ?? '');
-        if (!file_exists($file)) throw new Exception("File not found.");
-        shell_exec("openssl enc -d -aes-256-cbc -pbkdf2 -pass pass:".BACKUP_KEY." -in $file | gunzip | mariadb");
-        $res = ['message' => "Restored: ".$_POST['filename']];
-    } elseif ($action === 'save_s3_config') {
-        $conf = "[remote]\ntype = s3\nprovider = Other\nenv_auth = false\nendpoint = {$_POST['s3_endpoint']}\naccess_key_id = {$_POST['s3_access_key']}\nsecret_access_key = {$_POST['s3_secret_key']}\n";
-        file_put_contents('/root/.rclone.conf', $conf);
-        $res = ['message' => "Cloud Vault Link Established."];
     } elseif ($action === 'list_tenants') {
-        $sql = "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '%\_%' AND SCHEMA_NAME NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')";
+        $sql = "SELECT SCHEMA_NAME, 
+                (SELECT SUM(data_length + index_length) FROM information_schema.TABLES WHERE table_schema = SCHEMA_NAME) as size_bytes
+                FROM information_schema.SCHEMATA 
+                WHERE SCHEMA_NAME LIKE '%\_%' AND SCHEMA_NAME NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')";
         foreach ($pdo->query($sql) as $r) {
-            $db = $r['SCHEMA_NAME']; $u = explode('_', $db)[0].'_user';
+            $db = $r['SCHEMA_NAME']; $prefix = explode('_', $db)[0]; $u = $prefix . '_user';
             $stmt = $pdo->prepare("SELECT User, Host FROM mysql.user WHERE User = ?");
             $stmt->execute([$u]);
-            $res[] = ['db' => $db, 'user' => $u, 'users' => $stmt->fetchAll()];
+            $res[] = [
+                'db' => $db, 
+                'user' => $u, 
+                'size_mb' => round(($r['size_bytes'] ?? 0) / 1024 / 1024, 2),
+                'users' => $stmt->fetchAll()
+            ];
         }
+    } elseif ($action === 'update_hosts') {
+        $u = $_POST['db_user'];
+        $hosts = json_decode($_POST['hosts'], true);
+        if (!$hosts) throw new Exception("Invalid host list.");
+        // Get current pass (harsh but effective way to sync across hosts)
+        $p_stmt = $pdo->prepare("SELECT authentication_string FROM mysql.user WHERE User = ? AND Host = 'localhost' LIMIT 1");
+        $p_stmt->execute([$u]);
+        $auth_str = $p_stmt->fetchColumn();
+        
+        $pdo->exec("DELETE FROM mysql.user WHERE User = '$u' AND Host != 'localhost'");
+        foreach($hosts as $h) {
+            $pdo->exec("CREATE USER IF NOT EXISTS '$u'@'$h' IDENTIFIED BY PASSWORD '$auth_str'");
+            // Re-grant permissions for this DB (prefix_db)
+            $db_name = explode('_user', $u)[0] . '_db';
+            $pdo->exec("GRANT ALL PRIVILEGES ON `$db_name`.* TO '$u'@'$h'");
+        }
+        $pdo->exec("FLUSH PRIVILEGES");
+        $res = ['message' => "IP Whitelist Synchronized."];
+    } elseif ($action === 'trigger_backup') {
+        $filter = $_POST['db_name'] ?? '--all-databases';
+        if ($filter !== '--all-databases') $filter = "`$filter`";
+        $stamp = date('Ymd-His'); $file = BACKUP_DIR . "/snapshot-$stamp.sql.gz.enc";
+        shell_exec("mariadb-dump $filter --single-transaction --quick --routines --events | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:".BACKUP_KEY." -out $file");
+        @shell_exec("rclone sync ".BACKUP_DIR." remote:backup --config /root/.rclone.conf");
+        $res = ['message' => "Point-in-time snapshot created."];
     } elseif ($action === 'create') {
         $prefix = $_POST['db_prefix']; $suffix = $_POST['db_suffix']; $host = $_POST['remote_host'];
+        $max_conns = (int)($_POST['max_conns'] ?? 10);
         $dbName = $prefix.'_'.$suffix; $dbUser = $prefix.'_user'; $dbPass = bin2hex(random_bytes(12));
         $pdo->exec("CREATE DATABASE `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-        $check = $pdo->prepare("SELECT User FROM mysql.user WHERE User=? AND Host=?"); $check->execute([$dbUser, $host]); $exists = $check->fetch();
-        if (!$exists) {
-            $pdo->exec("CREATE USER '$dbUser'@'$host' IDENTIFIED BY '$dbPass'");
-            if ($host !== 'localhost') $pdo->exec("CREATE USER IF NOT EXISTS '$dbUser'@'localhost' IDENTIFIED BY '$dbPass'");
-        }
+        $pdo->exec("CREATE USER '$dbUser'@'$host' IDENTIFIED BY '$dbPass' WITH MAX_USER_CONNECTIONS $max_conns");
+        if ($host !== 'localhost') $pdo->exec("CREATE USER IF NOT EXISTS '$dbUser'@'localhost' IDENTIFIED BY '$dbPass' WITH MAX_USER_CONNECTIONS $max_conns");
         $pdo->exec("GRANT ALL PRIVILEGES ON `$dbName`.* TO '$dbUser'@'$host'");
         if ($host !== 'localhost') $pdo->exec("GRANT ALL PRIVILEGES ON `$dbName`.* TO '$dbUser'@'localhost'");
-        $res = ['message' => "Provisioned: $dbName", 'download' => ['filename' => $dbName.'.env', 'content' => "DB_DATABASE=$dbName\nDB_USERNAME=$dbUser\nDB_PASSWORD=".($exists?"(Existing)":$dbPass)]];
+        $res = ['message' => "Resource-hardened DB created.", 'download' => ['filename' => $dbName.'.env', 'content' => "DB_DATABASE=$dbName\nDB_USERNAME=$dbUser\nDB_PASSWORD=$dbPass"]];
     }
 } catch (Exception $e) { http_response_code(500); $res = ['error' => $e->getMessage()]; }
 header('Content-Type: application/json'); echo json_encode($res);
@@ -222,20 +213,19 @@ APACHE
 }
 
 configure_firewall() {
-  msg_header "Network Security: UFW"
+  msg_header "Hardening Firewall"
   ufw allow OpenSSH; ufw allow 'Apache Full'; ufw allow 3306/tcp; ufw --force enable
 }
 
 write_backup_script() {
-  msg_header "Initializing Backup Engine"
+  msg_header "Configuring Encryption Engine"
   mkdir -p /var/backups/mariadb
   cat >/usr/local/sbin/db-platform-backup.sh <<BACKUP
 #!/usr/bin/env bash
 set -euo pipefail
 BACKUP_DIR="/var/backups/mariadb"
 STAMP="\$(date +%F-%H%M%S)"
-mariadb-dump --all-databases --single-transaction --quick --routines --events | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:${MASTER_BACKUP_KEY} -out "\$BACKUP_DIR/daily-\$STAMP.sql.gz.enc"
-# Cloud Sync if config exists
+mariadb-dump --all-databases --single-transaction --quick --routines --events | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:${MASTER_BACKUP_KEY} -out "\$BACKUP_DIR/auto-\$STAMP.sql.gz.enc"
 if [ -f /root/.rclone.conf ]; then rclone sync "\$BACKUP_DIR" remote:backup --config /root/.rclone.conf; fi
 find "\$BACKUP_DIR" -type f -name '*.enc' -mtime +30 -delete
 BACKUP
@@ -246,14 +236,12 @@ BACKUP
 
 write_summary() {
   cat > "$SUMMARY_FILE" <<EOF
-DB NODE DEPLOYMENT SUCCESSFUL
+SHIELD NODE v5.0 SUCCESSFUL
 Agent Key: ${AGENT_API_KEY}
 Backup Key: ${MASTER_BACKUP_KEY}
-Provisioner: ${PROVISIONER_DB_USER} / ${PROVISIONER_DB_PASS}
+Provisioner: ${PROVISIONER_DB_USER}
 EOF
-  echo -e "\n${CLR_BOLD}${CLR_GREEN}Node ready!${CLR_RESET}"
-  echo -e "Agent Security Key: ${CLR_YELLOW}${AGENT_API_KEY}${CLR_RESET}"
-  echo -e "Master Backup Key: ${CLR_YELLOW}${MASTER_BACKUP_KEY}${CLR_RESET}"
+  echo -e "\n${CLR_BOLD}${CLR_GREEN}Enterprise Node Online!${RESET:-}"
 }
 
 main() {
