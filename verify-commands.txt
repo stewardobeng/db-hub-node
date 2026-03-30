@@ -1,0 +1,7 @@
+systemctl status mariadb
+systemctl status apache2
+apache2ctl configtest
+ss -tulpen | grep -E '3306|80|443'
+php -m | grep -E 'mysqli|pdo_mysql'
+mysql -u dbadmin -p -e "SHOW GRANTS FOR 'dbadmin'@'localhost';"
+mysql -u dbprovisioner -p -e "SHOW GRANTS FOR 'dbprovisioner'@'localhost';"
