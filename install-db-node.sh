@@ -277,10 +277,10 @@ APACHE
 
 configure_firewall() {
   msg_header "Configuring Firewall"
-  ufw allow OpenSSH
-  ufw allow from "$HUB_IP" to any port 80 proto tcp
-  ufw allow from "$HUB_IP" to any port 443 proto tcp
-  ufw --force enable
+  run_with_spinner "Allowing SSH" ufw allow OpenSSH
+  run_with_spinner "Allowing HTTP/HTTPS" ufw allow 'Apache Full'
+  run_with_spinner "Allowing Remote MariaDB (3306)" ufw allow 3306/tcp
+  run_with_spinner "Enabling Firewall" ufw --force enable
 }
 
 write_summary() {
