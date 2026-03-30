@@ -58,7 +58,7 @@ AGENT_ROOT="/var/www/db-agent"
 MARIADB_CNF="/etc/mysql/mariadb.conf.d/50-server.cnf"
 SUMMARY_FILE="/root/db-node-install-summary.txt"
 
-: "${HUB_IP:=0.0.0.0/0}"
+: "${HUB_IP:=any}"
 : "${SITE_FQDN:=_}"
 : "${PMA_ALIAS:=phpmyadmin}"
 : "${LETSENCRYPT_EMAIL:=}"
@@ -67,12 +67,43 @@ PROVISIONER_DB_USER="dbprovisioner"
 PROVISIONER_DB_PASS="$(openssl rand -base64 24 | tr -d '\n')"
 AGENT_API_KEY="$(openssl rand -hex 32)"
 MASTER_BACKUP_KEY="$(openssl rand -hex 16)"
+AGENT_REQUIRE_DIRECTIVE="Require all granted"
+
+normalise_hub_restriction() {
+  local raw="${1:-}"
+  raw="$(printf '%s' "$raw" | tr -d '[:space:]')"
+  if [[ -z "$raw" ]]; then raw="any"; fi
+
+  case "${raw,,}" in
+    any|all|'*'|0.0.0.0/0|::/0)
+      HUB_IP="any"
+      AGENT_REQUIRE_DIRECTIVE="Require all granted"
+      return 0
+      ;;
+  esac
+
+  if [[ "$raw" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
+    HUB_IP="$raw"
+    AGENT_REQUIRE_DIRECTIVE="Require ip ${HUB_IP}"
+    return 0
+  fi
+
+  if [[ "$raw" =~ ^[0-9A-Fa-f:]+(/[0-9]{1,3})?$ ]]; then
+    HUB_IP="$raw"
+    AGENT_REQUIRE_DIRECTIVE="Require ip ${HUB_IP}"
+    return 0
+  fi
+
+  msg_err "Invalid Hub restriction: '$raw'. Use 'any', a single IP, or CIDR such as 203.0.113.10 or 203.0.113.0/24."
+  exit 1
+}
 
 wizard() {
     echo -e "${CLR_BOLD}${CLR_CYAN}===================================================="
     echo "       DB-Shield NODE v5.0: ENTERPRISE SCALING      "
     echo -e "====================================================${CLR_RESET}"
-    read -p "Hub Restriction IP [${HUB_IP}]: " input_hub; HUB_IP=${input_hub:-$HUB_IP}
+    read -p "Hub Restriction IP or CIDR [${HUB_IP}]: " input_hub; HUB_IP=${input_hub:-$HUB_IP}
+    normalise_hub_restriction "$HUB_IP"
     read -p "Node FQDN: " input_fqdn; SITE_FQDN=${input_fqdn:-$SITE_FQDN}
     read -p "Email for SSL: " input_email; LETSENCRYPT_EMAIL=${input_email:-$LETSENCRYPT_EMAIL}
     echo -e "\n${CLR_BOLD}${CLR_YELLOW}Deploy Node? (y/n): ${CLR_RESET}"
@@ -299,7 +330,7 @@ Alias /agent-api ${AGENT_ROOT}
 <Directory ${AGENT_ROOT}>
     <RequireAny>
         Require local
-        Require ip ${HUB_IP}
+        ${AGENT_REQUIRE_DIRECTIVE}
     </RequireAny>
 </Directory>
 APACHE
