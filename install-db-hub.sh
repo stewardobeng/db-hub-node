@@ -248,8 +248,8 @@ $error = $_SESSION['error'] ?? ''; unset($_SESSION['error']);
             <input type="hidden" name="package_id" value="<?= $_GET['pkg'] ?? 1 ?>">
             <h2 class="text-3xl font-black text-white mb-10 tracking-tighter text-center uppercase">Initialize Client</h2>
             <div class="space-y-8">
-                <input type="email" name="email" placeholder="IDENTITY@EMAIL.COM" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-black tracking-widest uppercase" required autofocus>
-                <input type="password" name="password" placeholder="CREATE_ACCESS_KEY" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-black tracking-widest uppercase" required>
+                <input type="email" name="email" placeholder="IDENTITY@EMAIL.COM" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-[10px] font-bold tracking-widest" required autofocus>
+                <input type="password" name="password" placeholder="CREATE_ACCESS_KEY" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-[10px] font-bold tracking-widest" required>
                 <button class="w-full bg-indigo-600 py-6 rounded-3xl text-white font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-indigo-500/20 hover:bg-indigo-500 transition-all">Generate Identity</button>
             </div>
         </form>
@@ -257,15 +257,16 @@ $error = $_SESSION['error'] ?? ''; unset($_SESSION['error']);
 
 <?php elseif ($view === 'login'): ?>
     <div class="flex items-center justify-center min-h-screen bg-slate-950">
-        <form method="post" class="bg-slate-900/50 backdrop-blur-2xl p-16 rounded-[4rem] border border-white/5 w-full max-w-md shadow-2xl">
+        <form method="post" class="bg-slate-900/50 backdrop-blur-2xl p-16 rounded-[4rem] border border-white/5 w-full max-w-md shadow-2xl text-center">
             <input type="hidden" name="action" value="login"><input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-            <h2 class="text-3xl font-black text-white mb-10 tracking-tighter text-center uppercase">Secure Login</h2>
+            <div class="bg-indigo-600 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-10 rotate-6 shadow-xl shadow-indigo-500/20"><i class="fa-solid fa-fingerprint text-white text-3xl"></i></div>
+            <h2 class="text-3xl font-black text-white mb-10 tracking-tighter uppercase">Secure Access</h2>
             <?php if($error) echo "<div class='bg-red-500/10 text-red-500 text-[10px] font-black uppercase text-center p-4 rounded-2xl border border-red-500/20 mb-8'>$error</div>"; ?>
             <?php if($message) echo "<div class='bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase text-center p-4 rounded-2xl border border-emerald-500/20 mb-8'>$message</div>"; ?>
-            <div class="space-y-8">
-                <input type="email" name="email" placeholder="IDENTITY@EMAIL.COM" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-black tracking-widest uppercase" required autofocus>
-                <input type="password" name="password" placeholder="SECRET_ACCESS_KEY" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-black tracking-widest uppercase" required>
-                <button class="w-full bg-indigo-600 py-6 rounded-3xl text-white font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-indigo-500/20 hover:bg-indigo-500 transition-all">Unlock Platform</button>
+            <div class="space-y-8 text-left">
+                <input type="text" name="email" placeholder="IDENTITY" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-[10px] font-bold tracking-widest" required autofocus>
+                <input type="password" name="password" placeholder="SECRET_ACCESS_KEY" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-[10px] font-bold tracking-widest" required>
+                <button class="w-full bg-indigo-600 py-6 rounded-3xl text-white font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-indigo-500/20 hover:bg-indigo-500 transition-all">Unlock Environment</button>
             </div>
         </form>
     </div>
@@ -294,7 +295,7 @@ $error = $_SESSION['error'] ?? ''; unset($_SESSION['error']);
             <?php 
             $dbs = $db->prepare("SELECT t.*, s.public_url, s.name as server_name FROM tenant_dbs t JOIN servers s ON t.server_id = s.id WHERE t.client_id = ?"); $dbs->execute([$client_id]);
             foreach($dbs->fetchAll(PDO::FETCH_ASSOC) as $row): ?>
-            <div class="bg-slate-900/50 border border-white/5 p-10 rounded-[3rem] shadow-xl group hover:border-indigo-500/30 transition-all">
+            <div class="bg-slate-900/50 border border-white/5 p-10 rounded-[3rem] shadow-xl group hover:border-indigo-500/30 transition-all text-left">
                 <div class="flex items-center justify-between mb-8"><div class="bg-slate-800 p-4 rounded-3xl"><i class="fa-solid fa-database text-indigo-500 text-2xl"></i></div><span class="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center"><span class="w-2 h-2 bg-emerald-500 rounded-full mr-2 animate-ping"></span>Connected</span></div>
                 <h3 class="text-2xl font-black text-white mb-2 tracking-tight"><?= e($row['db_name']) ?></h3>
                 <p class="text-slate-600 text-[10px] font-black uppercase tracking-widest mb-10">Host Node: <span class="text-indigo-400"><?= e($row['server_name']) ?></span></p>
@@ -309,7 +310,7 @@ $error = $_SESSION['error'] ?? ''; unset($_SESSION['error']);
                     <h2 class="text-2xl font-black text-white mb-4 tracking-tighter uppercase text-center">Node Guard</h2>
                     <p class="text-xs text-slate-500 mb-10 font-bold uppercase tracking-widest text-center">Restrict access to specific IP addresses</p>
                     <textarea name="ips" class="w-full bg-slate-950 border-white/5 rounded-2xl p-6 text-white font-mono text-sm mb-10 focus:ring-indigo-500" rows="3"><?= implode(',', json_decode($row['allowed_ips'], true) ?: ['%']) ?></textarea>
-                    <div class="flex justify-end space-x-6"><button type="button" onclick="this.closest('[id^=modal-ips]').classList.add('hidden')" class="text-slate-600 font-black uppercase text-[10px] tracking-widest">Abort</button>
+                    <div class="flex justify-end space-x-6"><button type="button" onclick="this.closest('#modal-ips-<?= $row['id'] ?>').classList.add('hidden')" class="text-slate-600 font-black uppercase text-[10px] tracking-widest">Abort</button>
                     <button class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px] shadow-xl">Apply Changes</button></div>
                 </form></div>
             <?php endforeach; ?>
@@ -324,7 +325,7 @@ $error = $_SESSION['error'] ?? ''; unset($_SESSION['error']);
     <main class="max-w-7xl mx-auto px-16 py-16 space-y-16">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
             <?php foreach([['Active Nodes','servers','fa-server','indigo'],['Total Clients','clients','fa-user-group','emerald'],['Managed DBs','tenant_dbs','fa-database','amber']] as $c): ?>
-            <div class="bg-slate-900 p-8 rounded-[2.5rem] border border-white/5 shadow-xl">
+            <div class="bg-slate-900 p-8 rounded-[2.5rem] border border-white/5 shadow-xl text-left">
                 <div class="flex items-center justify-between mb-4"><span class="text-[10px] font-black text-slate-500 uppercase tracking-widest"><?= $c[0] ?></span><i class="fa-solid <?= $c[2] ?> text-<?= $c[3] ?>-500/20"></i></div>
                 <div class="text-4xl font-black text-white"><?= $db->query("SELECT COUNT(*) FROM ".$c[1])->fetchColumn() ?></div>
             </div><?php endforeach; ?>
@@ -334,7 +335,7 @@ $error = $_SESSION['error'] ?? ''; unset($_SESSION['error']);
             <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl">Link New Node</button>
         </div>
         <div class="bg-slate-900 rounded-[3rem] border border-white/5 overflow-hidden">
-            <table class="min-w-full divide-y divide-white/5">
+            <table class="min-w-full divide-y divide-white/5 text-left">
                 <thead class="bg-white/5"><tr><th class="px-10 py-5 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Node Name</th><th class="px-10 py-5 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Host Address</th><th class="px-10 py-5 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Operational Status</th></tr></thead>
                 <tbody class="divide-y divide-white/5"><?php foreach($servers as $s): ?>
                     <tr><td class="px-10 py-6 font-bold text-white"><?= e($s['name']) ?></td>
@@ -347,14 +348,14 @@ $error = $_SESSION['error'] ?? ''; unset($_SESSION['error']);
 <?php endif; ?>
 
 <div id="modal-add" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-8 z-50">
-    <form method="post" class="bg-slate-900 p-12 rounded-[4rem] border border-white/5 w-full max-w-lg shadow-2xl">
+    <form method="post" class="bg-slate-900 p-12 rounded-[4rem] border border-white/5 w-full max-w-lg shadow-2xl text-left">
         <input type="hidden" name="action" value="add_server"><input type="hidden" name="csrf" value="<?= csrf_token() ?>">
         <h2 class="text-3xl font-black text-white mb-10 tracking-tighter text-center uppercase">Link New Infrastructure</h2>
         <div class="space-y-6">
-            <input type="text" name="name" placeholder="NODE LABEL (E.G. EU-NODE-1)" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-black uppercase tracking-widest" required>
-            <input type="text" name="host" placeholder="INTERNAL IP ADDRESS" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-black uppercase tracking-widest" required>
-            <input type="password" name="agent_key" placeholder="AGENT SECURITY KEY" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-black uppercase tracking-widest" required>
-            <input type="text" name="public_url" placeholder="PUBLIC HTTPS URL" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-black uppercase tracking-widest" required>
+            <input type="text" name="name" placeholder="NODE LABEL (E.G. EU-NODE-1)" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-[10px] font-bold tracking-widest" required>
+            <input type="text" name="host" placeholder="INTERNAL IP ADDRESS" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-[10px] font-bold tracking-widest" required>
+            <input type="password" name="agent_key" placeholder="AGENT SECURITY KEY" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-[10px] font-bold tracking-widest" required>
+            <input type="text" name="public_url" placeholder="PUBLIC HTTPS URL" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-[10px] font-bold tracking-widest" required>
             <div class="flex justify-end space-x-6 pt-6"><button type="button" onclick="this.closest('#modal-add').classList.add('hidden')" class="text-slate-600 font-black uppercase text-[10px] tracking-widest">Abort</button>
             <button class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px]">Verify & Link</button></div>
         </div>
