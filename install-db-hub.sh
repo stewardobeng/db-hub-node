@@ -496,11 +496,15 @@ write_summary() {
   cat > "$SUMMARY_FILE" <<EOF
 SHIELD HUB v5.0 DEPLOYED (Enterprise Professional UI)
 Access: http://${SITE_FQDN}/${HUB_ALIAS}
-Admin Pass: ${HUB_ADMIN_PASS}
+Admin Identity: ${HUB_ADMIN_USER}
+Access Key: ${HUB_ADMIN_PASS}
 SaaS Features: ENABLED
 Security: ENTERPRISE HARDENED
 EOF
   echo -e "\n${CLR_BOLD}${CLR_GREEN}Professional Hub Interface Active!${CLR_RESET}"
+  echo -e "Admin Identity: ${CLR_YELLOW}${HUB_ADMIN_USER}${CLR_RESET}"
+  echo -e "Access Key:     ${CLR_YELLOW}${HUB_ADMIN_PASS}${CLR_RESET}\n"
+  msg_info "Full credentials saved to: ${CLR_BOLD}${SUMMARY_FILE}${CLR_RESET}"
 }
 
 main() { clear; wizard; install_packages; deploy_hub; systemctl restart apache2; configure_firewall; write_summary; }
