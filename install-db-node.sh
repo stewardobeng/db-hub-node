@@ -66,6 +66,7 @@ SUMMARY_FILE="/root/db-node-install-summary.txt"
 PROVISIONER_DB_USER="dbprovisioner"
 PROVISIONER_DB_PASS="$(openssl rand -base64 24 | tr -d '\n')"
 AGENT_API_KEY="$(openssl rand -hex 32)"
+MASTER_BACKUP_KEY="$(openssl rand -hex 16)"
 
 # --- Wizard ---
 wizard() {
@@ -84,7 +85,8 @@ wizard() {
     read -p "$(echo -e "${CLR_BOLD}Enter SSL Email (optional): ${CLR_RESET}")" input_email
     LETSENCRYPT_EMAIL=${input_email:-$LETSENCRYPT_EMAIL}
 
-    echo -e "\n${CLR_BOLD}${CLR_YELLOW}Ready to install Node components? (y/n): ${CLR_RESET}")" confirm
+    echo -e "\n${CLR_BOLD}${CLR_YELLOW}Ready to install Node components? (y/n): ${CLR_RESET}"
+    read -p "" confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
         msg_warn "Installation cancelled."
         exit 0
@@ -148,7 +150,7 @@ APACHE
 }
 
 deploy_agent() {
-  msg_header "Deploying Agent API"
+  msg_header "Deploying Agent API Bridge"
   mkdir -p "$AGENT_ROOT"
   
   cat >"$AGENT_ROOT/agent.php" <<'PHPAGENT'
@@ -157,6 +159,8 @@ declare(strict_types=1);
 const API_KEY = '__API_KEY__';
 const PROV_USER = '__PROV_USER__';
 const PROV_PASS = '__PROV_PASS__';
+const BACKUP_DIR = '/var/backups/mariadb';
+const BACKUP_KEY = '__BACKUP_KEY__';
 
 if (($_GET['key'] ?? '') !== API_KEY) {
     http_response_code(403); die('Forbidden');
@@ -176,73 +180,71 @@ try {
     $pdo = db();
     
     if ($action === 'stats') {
-        // RAM
         $free = 0; $total = 0;
         if (is_readable('/proc/meminfo')) {
             $mem = file_get_contents('/proc/meminfo');
             if (preg_match('/MemTotal:\s+(\d+)/', $mem, $m)) $total = (int)$m[1];
             if (preg_match('/MemAvailable:\s+(\d+)/', $mem, $m)) $free = (int)$m[1];
         }
-        $ram_usage = $total > 0 ? round((($total - $free) / $total) * 100) : 0;
-        
-        // CPU
-        $load = sys_getloadavg();
-        $cpu_usage = min(100, round(($load[0] / (int)shell_exec('nproc')) * 100));
-
         $res = [
-            'cpu' => $cpu_usage,
-            'ram' => $ram_usage,
+            'cpu' => min(100, round((sys_getloadavg()[0] / (int)shell_exec('nproc')) * 100)),
+            'ram' => $total > 0 ? round((($total - $free) / $total) * 100) : 0,
             'ram_text' => round(($total - $free)/1024/1024, 1) . 'GB / ' . round($total/1024/1024, 1) . 'GB',
             'disk' => round(((disk_total_space('/') - disk_free_space('/')) / disk_total_space('/')) * 100),
             'disk_text' => round(disk_free_space('/')/1024/1024/1024, 1) . 'GB Free',
             'active_conns' => (int)$pdo->query("SHOW STATUS LIKE 'Threads_connected'")->fetch()['Value']
         ];
 
+    } elseif ($action === 'list_backups') {
+        if (!is_dir(BACKUP_DIR)) mkdir(BACKUP_DIR, 0700, true);
+        $files = glob(BACKUP_DIR . '/*.sql.gz.enc');
+        foreach ($files as $f) {
+            $res[] = [
+                'name' => basename($f),
+                'size' => round(filesize($f) / 1024 / 1024, 2) . ' MB',
+                'date' => date('Y-m-d H:i:s', filemtime($f))
+            ];
+        }
+        usort($res, function($a, $b) { return strcmp($b['date'], $a['date']); });
+
+    } elseif ($action === 'trigger_backup') {
+        if (!is_dir(BACKUP_DIR)) mkdir(BACKUP_DIR, 0700, true);
+        $stamp = date('Ymd-His');
+        $file = BACKUP_DIR . "/manual-$stamp.sql.gz.enc";
+        shell_exec("mariadb-dump --all-databases --single-transaction --quick --routines --events | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:" . BACKUP_KEY . " -out $file");
+        $res = ['message' => "Backup created: $stamp"];
+
+    } elseif ($action === 'restore') {
+        $file = BACKUP_DIR . '/' . ($_POST['filename'] ?? '');
+        if (!file_exists($file)) throw new Exception("Backup file not found.");
+        shell_exec("openssl enc -d -aes-256-cbc -pbkdf2 -pass pass:" . BACKUP_KEY . " -in $file | gunzip | mariadb");
+        $res = ['message' => "System restored to " . $_POST['filename']];
+
     } elseif ($action === 'list_tenants') {
         $sql = "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '%\_%' AND SCHEMA_NAME NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')";
         foreach ($pdo->query($sql) as $r) {
-            $db = $r['SCHEMA_NAME'];
-            $prefix = explode('_', $db)[0];
-            $u = $prefix . '_user';
+            $db = $r['SCHEMA_NAME']; $prefix = explode('_', $db)[0]; $u = $prefix . '_user';
             $stmt = $pdo->prepare("SELECT User, Host FROM mysql.user WHERE User = ?");
             $stmt->execute([$u]);
             $res[] = ['db' => $db, 'user' => $u, 'users' => $stmt->fetchAll()];
         }
 
     } elseif ($action === 'create') {
-        $prefix = $_POST['db_prefix'];
-        $suffix = $_POST['db_suffix'];
-        $host = $_POST['remote_host'];
-        $dbName = $prefix . '_' . $suffix;
-        $dbUser = $prefix . '_user';
-        $dbPass = bin2hex(random_bytes(12));
-
+        $prefix = $_POST['db_prefix']; $suffix = $_POST['db_suffix']; $host = $_POST['remote_host'];
+        $dbName = $prefix . '_' . $suffix; $dbUser = $prefix . '_user'; $dbPass = bin2hex(random_bytes(12));
         $pdo->exec("CREATE DATABASE `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-        
         $check = $pdo->prepare("SELECT User FROM mysql.user WHERE User = ? AND Host = ?");
-        $check->execute([$dbUser, $host]);
-        $exists = $check->fetch();
-
+        $check->execute([$dbUser, $host]); $exists = $check->fetch();
         if (!$exists) {
             $pdo->exec("CREATE USER '$dbUser'@'$host' IDENTIFIED BY '$dbPass'");
             if ($host !== 'localhost') $pdo->exec("CREATE USER IF NOT EXISTS '$dbUser'@'localhost' IDENTIFIED BY '$dbPass'");
         }
-        
         $pdo->exec("GRANT ALL PRIVILEGES ON `$dbName`.* TO '$dbUser'@'$host'");
         if ($host !== 'localhost') $pdo->exec("GRANT ALL PRIVILEGES ON `$dbName`.* TO '$dbUser'@'localhost'");
-        
-        $res = [
-            'message' => "Database $dbName created.",
-            'download' => [
-                'filename' => $dbName . '.env',
-                'content' => "DB_DATABASE=$dbName\nDB_USERNAME=$dbUser\nDB_PASSWORD=" . ($exists ? "(Existing)" : $dbPass)
-            ]
-        ];
+        $res = ['message' => "Database $dbName created.", 'download' => ['filename' => $dbName . '.env', 'content' => "DB_DATABASE=$dbName\nDB_USERNAME=$dbUser\nDB_PASSWORD=" . ($exists ? "(Existing)" : $dbPass)]];
 
     } elseif ($action === 'rotate') {
-        $u = $_POST['db_user'];
-        $h = $_POST['db_host'];
-        $p = bin2hex(random_bytes(12));
+        $u = $_POST['db_user']; $h = $_POST['db_host']; $p = bin2hex(random_bytes(12));
         $pdo->exec("ALTER USER '$u'@'$h' IDENTIFIED BY '$p'");
         $res = ['message' => "Password rotated.", 'download' => ['filename' => $u . '_new.env', 'content' => "USER=$u\nPASS=$p"]];
 
@@ -252,18 +254,14 @@ try {
         $res = ['message' => "Database deleted."];
     }
 
-} catch (Exception $e) {
-    http_response_code(500);
-    $res = ['error' => $e->getMessage()];
-}
-
-header('Content-Type: application/json');
-echo json_encode($res);
+} catch (Exception $e) { http_response_code(500); $res = ['error' => $e->getMessage()]; }
+header('Content-Type: application/json'); echo json_encode($res);
 PHPAGENT
 
   sed -i "s|__API_KEY__|${AGENT_API_KEY}|g" "$AGENT_ROOT/agent.php"
   sed -i "s|__PROV_USER__|${PROVISIONER_DB_USER}|g" "$AGENT_ROOT/agent.php"
   sed -i "s|__PROV_PASS__|${PROVISIONER_DB_PASS}|g" "$AGENT_ROOT/agent.php"
+  sed -i "s|__BACKUP_KEY__|${MASTER_BACKUP_KEY}|g" "$AGENT_ROOT/agent.php"
   
   cat >/etc/apache2/conf-available/db-agent.conf <<APACHE
 Alias /agent-api ${AGENT_ROOT}
@@ -283,15 +281,37 @@ configure_firewall() {
   run_with_spinner "Enabling Firewall" ufw --force enable
 }
 
+write_backup_script() {
+  msg_header "Installing Secure Backup Engine"
+  mkdir -p /var/backups/mariadb
+  cat >/usr/local/sbin/db-platform-backup.sh <<BACKUP
+#!/usr/bin/env bash
+set -euo pipefail
+BACKUP_DIR="/var/backups/mariadb"
+STAMP="\$(date +%F-%H%M%S)"
+# Dump -> Gzip -> OpenSSL Encryption
+mariadb-dump --all-databases --single-transaction --quick --routines --events | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:${MASTER_BACKUP_KEY} -out "\$BACKUP_DIR/daily-\$STAMP.sql.gz.enc"
+# Keep 30 days
+find "\$BACKUP_DIR" -type f -name '*.enc' -mtime +30 -delete
+BACKUP
+  chmod 700 /usr/local/sbin/db-platform-backup.sh
+  systemctl enable cron >/dev/null 2>&1 || true
+  systemctl start cron >/dev/null 2>&1 || true
+  (crontab -l 2>/dev/null || true; echo "0 2 * * * /usr/local/sbin/db-platform-backup.sh") | crontab -
+}
+
 write_summary() {
   cat > "$SUMMARY_FILE" <<EOF
 DB NODE INSTALLATION COMPLETE
 Agent API Key: ${AGENT_API_KEY}
+Master Backup Key: ${MASTER_BACKUP_KEY}
 Provisioner User: ${PROVISIONER_DB_USER}
 Provisioner Pass: ${PROVISIONER_DB_PASS}
 EOF
   echo -e "\n${CLR_BOLD}${CLR_GREEN}Node ready!${CLR_RESET}"
   echo -e "Agent API Key: ${CLR_YELLOW}${AGENT_API_KEY}${CLR_RESET}"
+  echo -e "Master Backup Key: ${CLR_YELLOW}${MASTER_BACKUP_KEY}${CLR_RESET}"
+  msg_info "Details saved to ${SUMMARY_FILE}"
 }
 
 main() {
@@ -304,6 +324,7 @@ main() {
   deploy_agent
   systemctl restart apache2
   configure_firewall
+  write_backup_script
   write_summary
 }
 
