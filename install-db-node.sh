@@ -14,6 +14,8 @@ CLR_BLUE="\033[0;34m"
 CLR_MAGENTA="\033[0;35m"
 CLR_CYAN="\033[0;36m"
 
+sed_escape() { printf '%s' "$1" | sed -e 's/[|&\\]/\\&/g'; }
+
 # --- UI Helpers ---
 msg_header() { echo -e "\n${CLR_BOLD}${CLR_MAGENTA}=== $* ===${CLR_RESET}"; }
 msg_info()   { echo -e "${CLR_BLUE}[i]${CLR_RESET} $*"; }
@@ -114,8 +116,8 @@ EOF
   systemctl restart mariadb
 
   mysql <<SQL
-CREATE USER IF NOT EXISTS '${PROVISIONER_DB_USER}'@'%' IDENTIFIED BY '${PROVISIONER_DB_PASS}';
-GRANT ALL PRIVILEGES ON *.* TO '${PROVISIONER_DB_USER}'@'%' WITH GRANT OPTION;
+CREATE USER IF NOT EXISTS '${PROVISIONER_DB_USER}'@'localhost' IDENTIFIED BY '${PROVISIONER_DB_PASS}';
+GRANT ALL PRIVILEGES ON *.* TO '${PROVISIONER_DB_USER}'@'localhost' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 SQL
 }
@@ -154,6 +156,33 @@ function db(): PDO {
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
     ]);
 }
+function ensure_identifier(string $value, string $label): string {
+    if (!preg_match('/^[A-Za-z0-9_]{1,48}$/', $value)) throw new InvalidArgumentException($label . ' is invalid.');
+    return $value;
+}
+function ensure_host_value(string $value): string {
+    if ($value === '%') return $value;
+    if (filter_var($value, FILTER_VALIDATE_IP)) return $value;
+    if (preg_match('/^[A-Za-z0-9._:%-]{1,255}$/', $value)) return $value;
+    throw new InvalidArgumentException('Host value is invalid.');
+}
+function sql_ident(string $value): string {
+    return '`' . str_replace('`', '``', $value) . '`';
+}
+function tenant_db_for_user(string $dbUser): string {
+    if (!preg_match('/^([A-Za-z0-9]+)_user$/', $dbUser, $m)) throw new InvalidArgumentException('Database user is invalid.');
+    return $m[1] . '_db';
+}
+function quoted_user_host(PDO $pdo, string $user, string $host): string {
+    return $pdo->quote($user) . '@' . $pdo->quote($host);
+}
+function drop_remote_user_hosts(PDO $pdo, string $user): void {
+    $stmt = $pdo->prepare("SELECT Host FROM mysql.user WHERE User = ? AND Host != 'localhost'");
+    $stmt->execute([$user]);
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $host) {
+        $pdo->exec("DROP USER IF EXISTS " . quoted_user_host($pdo, $user, (string)$host));
+    }
+}
 
 $action = $_GET['action'] ?? 'stats';
 $res = [];
@@ -175,10 +204,11 @@ try {
             'active_conns' => (int)$pdo->query("SHOW STATUS LIKE 'Threads_connected'")->fetch()['Value']
         ];
     } elseif ($action === 'list_tenants') {
-        $sql = "SELECT SCHEMA_NAME, 
+        $sql = "SELECT SCHEMA_NAME,
                 (SELECT SUM(data_length + index_length) FROM information_schema.TABLES WHERE table_schema = SCHEMA_NAME) as size_bytes
-                FROM information_schema.SCHEMATA 
-                WHERE SCHEMA_NAME LIKE '%\_%' AND SCHEMA_NAME NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')";
+                FROM information_schema.SCHEMATA
+                WHERE SCHEMA_NAME LIKE '%\\_db' ESCAPE '\\'
+                  AND SCHEMA_NAME NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')";
         foreach ($pdo->query($sql) as $r) {
             $db = $r['SCHEMA_NAME']; $prefix = explode('_', $db)[0]; $u = $prefix . '_user';
             $stmt = $pdo->prepare("SELECT User, Host FROM mysql.user WHERE User = ?");
@@ -191,54 +221,86 @@ try {
             ];
         }
     } elseif ($action === 'update_hosts') {
-        $u = $_POST['db_user'];
-        $hosts = json_decode($_POST['hosts'], true);
-        if (!$hosts) throw new Exception("Invalid host list.");
-        // Get current pass (harsh but effective way to sync across hosts)
+        $u = ensure_identifier((string)($_POST['db_user'] ?? ''), 'Database user');
+        $hosts = json_decode((string)($_POST['hosts'] ?? '[]'), true);
+        if (!is_array($hosts) || !$hosts) throw new Exception("Invalid host list.");
+        $hosts = array_values(array_unique(array_map('ensure_host_value', $hosts)));
         $p_stmt = $pdo->prepare("SELECT authentication_string FROM mysql.user WHERE User = ? AND Host = 'localhost' LIMIT 1");
         $p_stmt->execute([$u]);
         $auth_str = $p_stmt->fetchColumn();
-        
-        $pdo->exec("DELETE FROM mysql.user WHERE User = '$u' AND Host != 'localhost'");
+        if (!$auth_str) throw new Exception("Base localhost user not found.");
+
+        drop_remote_user_hosts($pdo, $u);
+        $db_name = tenant_db_for_user($u);
         foreach($hosts as $h) {
-            $pdo->exec("CREATE USER IF NOT EXISTS '$u'@'$h' IDENTIFIED BY PASSWORD '$auth_str'");
-            // Re-grant permissions for this DB (prefix_db)
-            $db_name = explode('_user', $u)[0] . '_db';
-            $pdo->exec("GRANT ALL PRIVILEGES ON `$db_name`.* TO '$u'@'$h'");
+            if ($h === 'localhost') continue;
+            $pdo->exec("CREATE USER IF NOT EXISTS " . quoted_user_host($pdo, $u, $h) . " IDENTIFIED BY PASSWORD " . $pdo->quote((string)$auth_str));
+            $pdo->exec("GRANT ALL PRIVILEGES ON " . sql_ident($db_name) . ".* TO " . quoted_user_host($pdo, $u, $h));
         }
         $pdo->exec("FLUSH PRIVILEGES");
         $res = ['message' => "IP Whitelist Synchronized."];
     } elseif ($action === 'trigger_backup') {
-        $filter = $_POST['db_name'] ?? '--all-databases';
-        if ($filter !== '--all-databases') $filter = "`$filter`";
-        $stamp = date('Ymd-His'); $file = BACKUP_DIR . "/snapshot-$stamp.sql.gz.enc";
-        shell_exec("mariadb-dump $filter --single-transaction --quick --routines --events | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:".BACKUP_KEY." -out $file");
-        @shell_exec("rclone sync ".BACKUP_DIR." remote:backup --config /root/.rclone.conf");
+        $dbName = trim((string)($_POST['db_name'] ?? ''));
+        $stamp = date('Ymd-His');
+        $file = BACKUP_DIR . "/snapshot-$stamp.sql.gz.enc";
+        if (!is_dir(BACKUP_DIR)) mkdir(BACKUP_DIR, 0700, true);
+        $dumpCmd = $dbName !== ''
+            ? "mariadb-dump --databases " . escapeshellarg(ensure_identifier($dbName, 'Database name')) . " --single-transaction --quick --routines --events"
+            : "mariadb-dump --all-databases --single-transaction --quick --routines --events";
+        shell_exec($dumpCmd . " | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass " . escapeshellarg('pass:' . BACKUP_KEY) . " -out " . escapeshellarg($file));
+        @shell_exec("rclone sync " . escapeshellarg(BACKUP_DIR) . " remote:backup --config /root/.rclone.conf");
         $res = ['message' => "Point-in-time snapshot created."];
     } elseif ($action === 'create') {
-        $prefix = $_POST['db_prefix']; $suffix = $_POST['db_suffix']; $host = $_POST['remote_host'];
+        $prefix = ensure_identifier((string)($_POST['db_prefix'] ?? ''), 'Database prefix');
+        $suffix = ensure_identifier((string)($_POST['db_suffix'] ?? ''), 'Database suffix');
+        $host = ensure_host_value((string)($_POST['remote_host'] ?? '%'));
         $max_conns = (int)($_POST['max_conns'] ?? 10);
-        $dbName = $prefix.'_'.$suffix; $dbUser = $prefix.'_user'; $dbPass = bin2hex(random_bytes(12));
-        $pdo->exec("CREATE DATABASE `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-        $pdo->exec("CREATE USER '$dbUser'@'$host' IDENTIFIED BY '$dbPass' WITH MAX_USER_CONNECTIONS $max_conns");
-        if ($host !== 'localhost') $pdo->exec("CREATE USER IF NOT EXISTS '$dbUser'@'localhost' IDENTIFIED BY '$dbPass' WITH MAX_USER_CONNECTIONS $max_conns");
-        $pdo->exec("GRANT ALL PRIVILEGES ON `$dbName`.* TO '$dbUser'@'$host'");
-        if ($host !== 'localhost') $pdo->exec("GRANT ALL PRIVILEGES ON `$dbName`.* TO '$dbUser'@'localhost'");
+        $dbName = $prefix . '_' . $suffix; $dbUser = $prefix . '_user'; $dbPass = bin2hex(random_bytes(12));
+        $pdo->exec("CREATE DATABASE " . sql_ident($dbName) . " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        $pdo->exec("CREATE USER " . quoted_user_host($pdo, $dbUser, $host) . " IDENTIFIED BY " . $pdo->quote($dbPass) . " WITH MAX_USER_CONNECTIONS $max_conns");
+        if ($host !== 'localhost') $pdo->exec("CREATE USER IF NOT EXISTS " . quoted_user_host($pdo, $dbUser, 'localhost') . " IDENTIFIED BY " . $pdo->quote($dbPass) . " WITH MAX_USER_CONNECTIONS $max_conns");
+        $pdo->exec("GRANT ALL PRIVILEGES ON " . sql_ident($dbName) . ".* TO " . quoted_user_host($pdo, $dbUser, $host));
+        if ($host !== 'localhost') $pdo->exec("GRANT ALL PRIVILEGES ON " . sql_ident($dbName) . ".* TO " . quoted_user_host($pdo, $dbUser, 'localhost'));
         $res = ['message' => "Resource-hardened DB created.", 'download' => ['filename' => $dbName.'.env', 'content' => "DB_DATABASE=$dbName\nDB_USERNAME=$dbUser\nDB_PASSWORD=$dbPass"]];
+    } elseif ($action === 'delete') {
+        $dbName = ensure_identifier((string)($_POST['db_name'] ?? ''), 'Database name');
+        $dbUser = ensure_identifier((string)($_POST['db_user'] ?? ''), 'Database user');
+        $stmt = $pdo->prepare("SELECT Host FROM mysql.user WHERE User = ?");
+        $stmt->execute([$dbUser]);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $userHost) {
+            $pdo->exec("DROP USER IF EXISTS " . quoted_user_host($pdo, $dbUser, (string)$userHost));
+        }
+        $pdo->exec("DROP DATABASE IF EXISTS " . sql_ident($dbName));
+        $res = ['message' => "Database removed."];
+    } elseif ($action === 'rotate_password') {
+        $dbUser = ensure_identifier((string)($_POST['db_user'] ?? ''), 'Database user');
+        $dbName = tenant_db_for_user($dbUser);
+        $dbPass = trim((string)($_POST['db_password'] ?? '')) ?: bin2hex(random_bytes(12));
+        $stmt = $pdo->prepare("SELECT Host FROM mysql.user WHERE User = ?");
+        $stmt->execute([$dbUser]);
+        $hosts = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        if (!$hosts) throw new Exception("Database user not found.");
+        foreach ($hosts as $userHost) {
+            $pdo->exec("ALTER USER " . quoted_user_host($pdo, $dbUser, (string)$userHost) . " IDENTIFIED BY " . $pdo->quote($dbPass));
+        }
+        $res = ['message' => "Password rotated.", 'download' => ['filename' => $dbName . '.env', 'content' => "DB_DATABASE=$dbName\nDB_USERNAME=$dbUser\nDB_PASSWORD=$dbPass"]];
     }
-} catch (Exception $e) { http_response_code(500); $res = ['error' => $e->getMessage()]; }
+} catch (Throwable $e) { http_response_code(500); $res = ['error' => $e->getMessage()]; }
 header('Content-Type: application/json'); echo json_encode($res);
 PHPAGENT
 
-  sed -i "s|__API_KEY__|${AGENT_API_KEY}|g" "$AGENT_ROOT/agent.php"
-  sed -i "s|__PROV_USER__|${PROVISIONER_DB_USER}|g" "$AGENT_ROOT/agent.php"
-  sed -i "s|__PROV_PASS__|${PROVISIONER_DB_PASS}|g" "$AGENT_ROOT/agent.php"
-  sed -i "s|__BACKUP_KEY__|${MASTER_BACKUP_KEY}|g" "$AGENT_ROOT/agent.php"
+  sed -i "s|__API_KEY__|$(sed_escape "$AGENT_API_KEY")|g" "$AGENT_ROOT/agent.php"
+  sed -i "s|__PROV_USER__|$(sed_escape "$PROVISIONER_DB_USER")|g" "$AGENT_ROOT/agent.php"
+  sed -i "s|__PROV_PASS__|$(sed_escape "$PROVISIONER_DB_PASS")|g" "$AGENT_ROOT/agent.php"
+  sed -i "s|__BACKUP_KEY__|$(sed_escape "$MASTER_BACKUP_KEY")|g" "$AGENT_ROOT/agent.php"
   
   cat >/etc/apache2/conf-available/db-agent.conf <<APACHE
 Alias /agent-api ${AGENT_ROOT}
 <Directory ${AGENT_ROOT}>
-    Require all granted
+    <RequireAny>
+        Require local
+        Require ip ${HUB_IP}
+    </RequireAny>
 </Directory>
 APACHE
   a2enconf db-agent >/dev/null 2>&1 || true
@@ -272,6 +334,8 @@ SHIELD NODE v5.0 SUCCESSFUL
 Agent Key: ${AGENT_API_KEY}
 Backup Key: ${MASTER_BACKUP_KEY}
 Provisioner: ${PROVISIONER_DB_USER}
+Agent Path Restriction: ${HUB_IP}
+phpMyAdmin Alias: ${PMA_ALIAS}
 EOF
   echo -e "\n${CLR_BOLD}${CLR_GREEN}Enterprise Node Online!${RESET:-}"
 }
