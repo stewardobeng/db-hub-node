@@ -57,7 +57,7 @@ wizard() {
 install_packages() {
   msg_header "Finalizing Hub Stack"
   apt-get update >/dev/null 2>&1
-  apt-get install -y apache2 php php-cli php-mysql php-curl php-sqlite3 php-mbstring php-xml unzip curl openssl ufw cron >/dev/null 2>&1
+  apt-get install -y apache2 libapache2-mod-php php php-cli php-mysql php-curl php-sqlite3 php-mbstring php-xml unzip curl openssl ufw cron >/dev/null 2>&1
 }
 
 deploy_hub() {
