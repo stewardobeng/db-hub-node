@@ -2,17 +2,21 @@
 
 A distributed, multi-tenant MariaDB management system. This platform allows you to manage multiple remote database servers (Nodes) from a single central dashboard (Hub).
 
-## Features
+## Features (v5.0 Enterprise)
 
-- **Central Management Hub**: One dashboard to rule all your database servers.
-- **Remote Provisioning**: Create databases and users on any connected node via a secure Agent API.
-- **Real-time Monitoring**: Monitor CPU, RAM, Disk, and Active Connections for every server in your fleet.
-- **Smart Access**: One-click login to phpMyAdmin for any database on any server.
-- **Security**: 
-  - Custom Hub Login.
-  - API Key authenticated communication between Hub and Nodes.
-  - Automatic Let's Encrypt SSL support.
-  - Automated logical backups.
+- **Central Management Hub**: Professional Cyber-Industrial dashboard for total fleet control.
+- **Intelligent Provisioning**: Automated node selection based on real-time server load (CPU/RAM).
+- **Security Shield**:
+  - **Granular IP Whitelisting**: Clients can restrict DB access to specific IPs (Vercel, Office, etc.).
+  - **Brute-Force Protection**: Automatic IP locking after failed login attempts.
+  - **Hardened Headers**: Production-grade web security configurations.
+- **Monetization & Quotas**:
+  - **Paystack Integration**: Fully automated subscription activation via webhooks.
+  - **Resource Enforcement**: Disk quotas (GB) and Connection limits per plan.
+- **Enterprise Backups**:
+  - **Point-in-Time Recovery**: Trigger and restore snapshots directly from the Hub.
+  - **Encrypted Cloud Sync**: Automated AES-256 encrypted sync to Cloudflare R2/S3.
+- **Communication**: SMTP-powered notifications for provisioning, billing, and server health.
 
 ## Architecture
 

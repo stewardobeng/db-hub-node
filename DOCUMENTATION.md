@@ -22,12 +22,28 @@ DB-Shield uses a **Hub-and-Spoke** architecture designed for scalability and sec
     -   Backup triggering and restoration.
 -   **Security**: The Agent API requires a unique `AGENT_KEY` for every request. MariaDB is configured to allow remote connections but restricted by UFW.
 
-## 3. Subscription & Billing System (Planned)
+## 3. Advanced Features (v5.0)
+
+### A. Granular IP Whitelisting
+-   **Mechanism**: The Hub sends a JSON list of IPs to the Node's `update_hosts` endpoint.
+-   **Execution**: The Node Agent drops existing remote users and recreates them with specific `HOST` definitions in MariaDB.
+-   **Security**: Always preserves `localhost` access for phpMyAdmin connectivity.
+
+### B. Resource Enforcement & Quotas
+-   **Disk Quotas**: The Hub tracks `disk_quota_gb` per package. The Node reports usage via `list_tenants` (calculated from `information_schema.TABLES`).
+-   **Connection Limits**: Provisioning uses `WITH MAX_USER_CONNECTIONS X` to prevent "noisy neighbor" scenarios where one tenant exhausts server threads.
+
+### C. Intelligent Load Balancing
+-   **Logic**: During provisioning, the Hub performs a health-check on all "Online" servers.
+-   **Selection**: The server with the lowest `CPU Usage %` is automatically targeted for the new database.
+
+### D. Automated Watchdog
+-   **Cron Job**: A 10-minute heartbeat checks node connectivity.
+-   **Alerts**: Failure to reach a node triggers an SMTP alert to the Admin email defined during setup.
+
+## 4. Subscription & Billing System
 -   **Platform**: Paystack Integration.
--   **Logic**:
-    -   Hub tracks `expiry_date` for each tenant.
-    -   When a subscription expires, the Hub sends a "Lock" command to the Node to suspend the database user.
-    -   Users can renew via the Hub Client Portal.
+-   **Webhooks**: Hub exposes an endpoint for `charge.success` to automatically activate accounts and calculate `expires_at`.
 
 ## 4. Backup & Disaster Recovery
 ### Automated Backups
