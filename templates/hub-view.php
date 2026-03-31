@@ -79,7 +79,7 @@ body { font-family: 'Inter', sans-serif; }
                         <span class="material-symbols-outlined text-lg">shield</span>
                     </span>
                     <span>
-                        <span class="block font-headline text-xl font-extrabold tracking-tight">DB-Shield</span>
+                        <span class="block font-headline text-xl font-extrabold tracking-tight">CloudDB</span>
                         <span class="block text-[10px] font-bold uppercase tracking-[0.24em] text-on-surface-variant">Infrastructure</span>
                     </span>
                 </a>
@@ -267,7 +267,7 @@ body { font-family: 'Inter', sans-serif; }
         <aside class="fixed left-0 top-0 z-40 hidden h-full w-64 flex-col border-r border-outline-variant/10 bg-surface-container-low px-4 py-5 lg:flex">
             <a href="<?= e($is_admin ? page_url('overview') : page_url('client')) ?>" class="mb-8 flex items-center gap-3 px-2">
                 <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-on-primary shadow-[0_28px_80px_-40px_rgba(17,48,105,0.28)]"><span class="material-symbols-outlined">shield</span></span>
-                <span><span class="block font-headline text-xl font-extrabold tracking-tight">DB-Shield</span><span class="block text-[10px] font-bold uppercase tracking-[0.22em] text-on-surface-variant"><?= $is_admin ? 'Infrastructure' : 'Tenant workspace' ?></span></span>
+                <span><span class="block font-headline text-xl font-extrabold tracking-tight">CloudDB</span><span class="block text-[10px] font-bold uppercase tracking-[0.22em] text-on-surface-variant"><?= $is_admin ? 'Infrastructure' : 'Tenant workspace' ?></span></span>
             </a>
             <nav class="flex-1 space-y-1">
                 <?php foreach ($navItems as $item): ?>

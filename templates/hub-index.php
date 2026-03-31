@@ -316,13 +316,13 @@ function send_mail(string $to, string $subject, string $message): void {
             }
             stream_set_timeout($socket, 15);
             smtp_expect($socket, [220]);
-            smtp_write($socket, 'EHLO db-shield');
+            smtp_write($socket, 'EHLO clouddb');
             smtp_expect($socket, [250]);
             if ($port !== 465) {
                 smtp_write($socket, 'STARTTLS');
                 $response = smtp_expect($socket, [220, 454]);
                 if (str_starts_with($response, '220') && @stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
-                    smtp_write($socket, 'EHLO db-shield');
+                    smtp_write($socket, 'EHLO clouddb');
                     smtp_expect($socket, [250]);
                 }
             }
@@ -827,7 +827,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'paystack_webhook') {
             $expiry = date('Y-m-d H:i:s', strtotime("+{$days} days"));
             $db->prepare("UPDATE clients SET package_id = ?, expires_at = ?, status = 'active' WHERE email = ?")->execute([$pkgId, $expiry, $email]);
             record_activity($db, 'system', null, 'billing.activated', 'client', null, 'Billing activated for ' . $email . '.');
-            send_mail($email, 'Subscription active', 'Your DB-Shield account is ready.');
+            send_mail($email, 'Subscription active', 'Your CloudDB account is ready.');
         }
     }
     exit;
@@ -1549,21 +1549,21 @@ if ($drawer === 'plan-edit' && $is_admin) {
 }
 
 $documentTitle = match ($view) {
-    'landing' => 'DB-Shield | Secure MariaDB Infrastructure',
-    'login' => 'Sign in | DB-Shield',
-    'signup' => 'Create account | DB-Shield',
-    'overview' => 'Admin Dashboard | DB-Shield',
-    'nodes' => 'Nodes | DB-Shield',
-    'tenants' => 'Tenants | DB-Shield',
-    'backups' => 'Backups Center | DB-Shield',
-    'plans' => 'Service Tiers | DB-Shield',
-    'activity' => 'Audit Trail | DB-Shield',
-    'databases' => 'Databases | DB-Shield',
-    'database' => ($databaseDetail['db_name'] ?? 'Database') . ' | DB-Shield',
-    'client' => 'Client Dashboard | DB-Shield',
-    'account' => 'Account | DB-Shield',
-    'settings' => 'Settings | DB-Shield',
-    default => 'DB-Shield',
+    'landing' => 'CloudDB | Secure MariaDB Infrastructure',
+    'login' => 'Sign in | CloudDB',
+    'signup' => 'Create account | CloudDB',
+    'overview' => 'Admin Dashboard | CloudDB',
+    'nodes' => 'Nodes | CloudDB',
+    'tenants' => 'Tenants | CloudDB',
+    'backups' => 'Backups Center | CloudDB',
+    'plans' => 'Service Tiers | CloudDB',
+    'activity' => 'Audit Trail | CloudDB',
+    'databases' => 'Databases | CloudDB',
+    'database' => ($databaseDetail['db_name'] ?? 'Database') . ' | CloudDB',
+    'client' => 'Client Dashboard | CloudDB',
+    'account' => 'Account | CloudDB',
+    'settings' => 'Settings | CloudDB',
+    default => 'CloudDB',
 };
 
 $panel = 'bg-surface-container-lowest rounded-2xl border border-outline-variant/10 shadow-[0_28px_80px_-40px_rgba(17,48,105,0.28)]';

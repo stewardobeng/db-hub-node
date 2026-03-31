@@ -1,4 +1,4 @@
-# DB-Shield UI Design Brief
+# CloudDB UI Design Brief
 
 This file is a product-facing UI brief for designers. It is not an implementation spec.
 
@@ -6,7 +6,7 @@ The goal is to redesign the Hub so it feels like a professional infrastructure c
 
 ## 1. Product Context
 
-DB-Shield is a Hub-and-Node MariaDB platform with two primary roles:
+CloudDB is a Hub-and-Node MariaDB platform with two primary roles:
 
 - Admin:
   - manages Nodes

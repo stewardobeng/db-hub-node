@@ -119,6 +119,10 @@ hub_component_present() {
     [[ -d /var/www/db-hub ]] ||
     [[ -f /etc/apache2/conf-available/db-hub.conf ]] ||
     [[ -L /etc/apache2/conf-enabled/db-hub.conf ]] ||
+    [[ -f /etc/apache2/sites-available/db-hub-site.conf ]] ||
+    [[ -L /etc/apache2/sites-enabled/db-hub-site.conf ]] ||
+    [[ -f /etc/apache2/sites-available/db-hub-site-le-ssl.conf ]] ||
+    [[ -L /etc/apache2/sites-enabled/db-hub-site-le-ssl.conf ]] ||
     [[ -f /root/db-hub-install-summary.txt ]] ||
     crontab_has 'action=watchdog'
 }
@@ -129,6 +133,7 @@ node_component_present() {
     [[ -L /etc/apache2/conf-enabled/db-agent.conf ]] ||
     [[ -f /etc/apache2/conf-available/phpmyadmin.conf ]] ||
     [[ -L /etc/apache2/conf-enabled/phpmyadmin.conf ]] ||
+    [[ -f /etc/phpmyadmin/conf.d/90-db-platform.php ]] ||
     [[ -f /usr/local/sbin/db-platform-backup.sh ]] ||
     [[ -d /var/lib/mysql ]] ||
     [[ -d /etc/mysql ]] ||
@@ -327,11 +332,16 @@ stop_services() {
 remove_hub_assets() {
     msg_header "Removing Hub Components"
     run_with_spinner "Disabling db-hub config" a2disconf db-hub
+    run_with_spinner "Disabling db-hub site" a2dissite db-hub-site
+    run_with_spinner "Disabling db-hub SSL site" a2dissite db-hub-site-le-ssl
     run_with_spinner "Deleting db-hub.conf" rm -f /etc/apache2/conf-available/db-hub.conf
     run_with_spinner "Deleting enabled db-hub link" rm -f /etc/apache2/conf-enabled/db-hub.conf
+    run_with_spinner "Deleting db-hub site config" rm -f /etc/apache2/sites-available/db-hub-site.conf /etc/apache2/sites-enabled/db-hub-site.conf
+    run_with_spinner "Deleting db-hub SSL site config" rm -f /etc/apache2/sites-available/db-hub-site-le-ssl.conf /etc/apache2/sites-enabled/db-hub-site-le-ssl.conf
     run_with_spinner "Removing Hub watchdog cron" bash -c "crontab -l 2>/dev/null | grep -v 'action=watchdog' | crontab - || true"
     run_with_spinner "Removing Hub application" rm -rf /var/www/db-hub
     run_with_spinner "Removing Hub summary" rm -f /root/db-hub-install-summary.txt
+    run_with_spinner "Removing Hub TLS log" rm -f /root/db-hub-certbot.log
     run_with_spinner "Removing legacy creator app" rm -rf /var/www/dbcreator
     run_with_spinner "Removing legacy creator configs" rm -f /etc/apache2/conf-available/dbcreator.conf /etc/apache2/conf-available/fqdn.conf
     run_with_spinner "Deleting enabled legacy config links" rm -f /etc/apache2/conf-enabled/dbcreator.conf /etc/apache2/conf-enabled/fqdn.conf
@@ -346,6 +356,7 @@ remove_node_assets() {
     run_with_spinner "Disabling phpMyAdmin config" a2disconf phpmyadmin
     run_with_spinner "Deleting phpmyadmin.conf" rm -f /etc/apache2/conf-available/phpmyadmin.conf
     run_with_spinner "Deleting enabled phpMyAdmin link" rm -f /etc/apache2/conf-enabled/phpmyadmin.conf
+    run_with_spinner "Removing phpMyAdmin CloudDB config" rm -f /etc/phpmyadmin/conf.d/90-db-platform.php
     run_with_spinner "Removing backup cron" bash -c "crontab -l 2>/dev/null | grep -v 'db-platform-backup.sh' | crontab - || true"
     run_with_spinner "Removing backup script" rm -f /usr/local/sbin/db-platform-backup.sh
     run_with_spinner "Removing Node agent" rm -rf /var/www/db-agent

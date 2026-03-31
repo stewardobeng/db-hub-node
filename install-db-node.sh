@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# DB-Shield NODE Installer v5.0 (Enterprise Scaling Edition)
+# CloudDB NODE Installer v5.0 (Enterprise Scaling Edition)
 # High-Security Node with Resource Enforcement and Targeted Backups.
 
 # --- Colors & Styles ---
@@ -62,12 +62,22 @@ SUMMARY_FILE="/root/db-node-install-summary.txt"
 : "${SITE_FQDN:=_}"
 : "${PMA_ALIAS:=phpmyadmin}"
 : "${LETSENCRYPT_EMAIL:=}"
+: "${BACKUP_SCHEDULE:=0 2 * * *}"
+: "${BACKUP_RETENTION_DAYS:=30}"
+: "${BACKUP_SYNC_TARGET:=remote:backup}"
 
 PROVISIONER_DB_USER="dbprovisioner"
 PROVISIONER_DB_PASS="$(openssl rand -base64 24 | tr -d '\n')"
 AGENT_API_KEY="$(openssl rand -hex 32)"
 MASTER_BACKUP_KEY="$(openssl rand -hex 16)"
 AGENT_REQUIRE_DIRECTIVE="Require all granted"
+PMA_CONTROL_DB="phpmyadmin"
+PMA_CONTROL_USER="pma_clouddb"
+PMA_CONTROL_PASS="$(openssl rand -hex 16)"
+BACKUP_SCRIPT_PATH="/usr/local/sbin/db-platform-backup.sh"
+BACKUP_ENGINE_DIR="/etc/clouddb"
+BACKUP_DB_CNF="${BACKUP_ENGINE_DIR}/backup-mysql.cnf"
+BACKUP_LOG_FILE="/var/log/clouddb-backup.log"
 
 normalise_hub_restriction() {
   local raw="${1:-}"
@@ -100,7 +110,7 @@ normalise_hub_restriction() {
 
 wizard() {
     echo -e "${CLR_BOLD}${CLR_CYAN}===================================================="
-    echo "       DB-Shield NODE v5.0: ENTERPRISE SCALING      "
+    echo "         CloudDB NODE v5.0: ENTERPRISE SCALE        "
     echo -e "====================================================${CLR_RESET}"
     read -p "Hub Restriction IP or CIDR [${HUB_IP}]: " input_hub; HUB_IP=${input_hub:-$HUB_IP}
     normalise_hub_restriction "$HUB_IP"
@@ -156,6 +166,29 @@ SQL
 
 configure_phpmyadmin() {
   msg_header "UI Deployment: phpMyAdmin"
+  local pma_schema=""
+  if [[ -f /usr/share/phpmyadmin/sql/create_tables.sql ]]; then
+    pma_schema="/usr/share/phpmyadmin/sql/create_tables.sql"
+  elif [[ -f /usr/share/dbconfig-common/data/phpmyadmin/install/mysql ]]; then
+    pma_schema="/usr/share/dbconfig-common/data/phpmyadmin/install/mysql"
+  fi
+
+  mysql <<SQL
+CREATE DATABASE IF NOT EXISTS \`${PMA_CONTROL_DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${PMA_CONTROL_USER}'@'localhost' IDENTIFIED BY '${PMA_CONTROL_PASS}';
+ALTER USER '${PMA_CONTROL_USER}'@'localhost' IDENTIFIED BY '${PMA_CONTROL_PASS}';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`${PMA_CONTROL_DB}\`.* TO '${PMA_CONTROL_USER}'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+
+  if [[ -n "$pma_schema" ]]; then
+    if [[ "$(mysql -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '${PMA_CONTROL_DB}' AND table_name = 'pma__bookmark'")" == "0" ]]; then
+      mysql "${PMA_CONTROL_DB}" < "$pma_schema"
+    fi
+  else
+    msg_warn "phpMyAdmin storage schema file was not found. Configuration storage may remain limited."
+  fi
+
   cat >/etc/apache2/conf-available/phpmyadmin.conf <<APACHE
 Alias /${PMA_ALIAS} /usr/share/phpmyadmin
 <Directory /usr/share/phpmyadmin>
@@ -168,9 +201,35 @@ APACHE
   cat >/etc/phpmyadmin/conf.d/90-db-platform.php <<'PMACONF'
 <?php
 if (isset($i) && is_int($i)) {
-    $cfg['Servers'][$i]['hide_db'] = '^(information_schema|performance_schema|mysql|sys)$';
+    $cfg['Servers'][$i]['controlhost'] = 'localhost';
+    $cfg['Servers'][$i]['controluser'] = '__PMA_CONTROL_USER__';
+    $cfg['Servers'][$i]['controlpass'] = '__PMA_CONTROL_PASS__';
+    $cfg['Servers'][$i]['pmadb'] = '__PMA_CONTROL_DB__';
+    $cfg['Servers'][$i]['bookmarktable'] = 'pma__bookmark';
+    $cfg['Servers'][$i]['relation'] = 'pma__relation';
+    $cfg['Servers'][$i]['table_info'] = 'pma__table_info';
+    $cfg['Servers'][$i]['table_coords'] = 'pma__table_coords';
+    $cfg['Servers'][$i]['pdf_pages'] = 'pma__pdf_pages';
+    $cfg['Servers'][$i]['column_info'] = 'pma__column_info';
+    $cfg['Servers'][$i]['history'] = 'pma__history';
+    $cfg['Servers'][$i]['table_uiprefs'] = 'pma__table_uiprefs';
+    $cfg['Servers'][$i]['tracking'] = 'pma__tracking';
+    $cfg['Servers'][$i]['userconfig'] = 'pma__userconfig';
+    $cfg['Servers'][$i]['recent'] = 'pma__recent';
+    $cfg['Servers'][$i]['favorite'] = 'pma__favorite';
+    $cfg['Servers'][$i]['users'] = 'pma__users';
+    $cfg['Servers'][$i]['usergroups'] = 'pma__usergroups';
+    $cfg['Servers'][$i]['navigationhiding'] = 'pma__navigationhiding';
+    $cfg['Servers'][$i]['savedsearches'] = 'pma__savedsearches';
+    $cfg['Servers'][$i]['central_columns'] = 'pma__central_columns';
+    $cfg['Servers'][$i]['designer_settings'] = 'pma__designer_settings';
+    $cfg['Servers'][$i]['export_templates'] = 'pma__export_templates';
+    $cfg['Servers'][$i]['hide_db'] = '^(information_schema|performance_schema|mysql|sys|phpmyadmin)$';
 }
 PMACONF
+  sed -i "s|__PMA_CONTROL_USER__|$(sed_escape "$PMA_CONTROL_USER")|g" /etc/phpmyadmin/conf.d/90-db-platform.php
+  sed -i "s|__PMA_CONTROL_PASS__|$(sed_escape "$PMA_CONTROL_PASS")|g" /etc/phpmyadmin/conf.d/90-db-platform.php
+  sed -i "s|__PMA_CONTROL_DB__|$(sed_escape "$PMA_CONTROL_DB")|g" /etc/phpmyadmin/conf.d/90-db-platform.php
   a2enconf phpmyadmin >/dev/null 2>&1 || true
 }
 
@@ -185,7 +244,9 @@ const API_KEY = '__API_KEY__';
 const PROV_USER = '__PROV_USER__';
 const PROV_PASS = '__PROV_PASS__';
 const BACKUP_DIR = '/var/backups/mariadb';
-const BACKUP_SCRIPT = '/usr/local/sbin/db-platform-backup.sh';
+const BACKUP_SCRIPT = '__BACKUP_SCRIPT__';
+const BACKUP_DB_CNF = '__BACKUP_DB_CNF__';
+const BACKUP_LOG = '__BACKUP_LOG__';
 const BACKUP_KEY = '__BACKUP_KEY__';
 
 if (($_GET['key'] ?? '') !== API_KEY) { http_response_code(403); die('Forbidden'); }
@@ -224,7 +285,9 @@ function drop_remote_user_hosts(PDO $pdo, string $user): void {
     }
 }
 function queue_backup_job(array $dbNames = []): array {
-    if (!is_executable(BACKUP_SCRIPT)) throw new RuntimeException('Backup engine is not installed.');
+    if (!is_file(BACKUP_SCRIPT) || !is_executable(BACKUP_SCRIPT)) throw new RuntimeException('CloudDB backup engine is not installed.');
+    if (!is_readable(BACKUP_DB_CNF)) throw new RuntimeException('CloudDB backup credentials are not readable.');
+    if (!is_dir(BACKUP_DIR) || !is_writable(BACKUP_DIR)) throw new RuntimeException('CloudDB backup directory is not writable.');
     $cleanNames = [];
     foreach ($dbNames as $dbName) {
         $cleanNames[] = ensure_identifier((string)$dbName, 'Database name');
@@ -357,6 +420,9 @@ PHPAGENT
   sed -i "s|__PROV_USER__|$(sed_escape "$PROVISIONER_DB_USER")|g" "$AGENT_ROOT/agent.php"
   sed -i "s|__PROV_PASS__|$(sed_escape "$PROVISIONER_DB_PASS")|g" "$AGENT_ROOT/agent.php"
   sed -i "s|__BACKUP_KEY__|$(sed_escape "$MASTER_BACKUP_KEY")|g" "$AGENT_ROOT/agent.php"
+  sed -i "s|__BACKUP_SCRIPT__|$(sed_escape "$BACKUP_SCRIPT_PATH")|g" "$AGENT_ROOT/agent.php"
+  sed -i "s|__BACKUP_DB_CNF__|$(sed_escape "$BACKUP_DB_CNF")|g" "$AGENT_ROOT/agent.php"
+  sed -i "s|__BACKUP_LOG__|$(sed_escape "$BACKUP_LOG_FILE")|g" "$AGENT_ROOT/agent.php"
   
   cat >/etc/apache2/conf-available/db-agent.conf <<APACHE
 Alias /agent-api ${AGENT_ROOT}
@@ -376,43 +442,83 @@ configure_firewall() {
 }
 
 write_backup_script() {
-  msg_header "Configuring Encryption Engine"
-  mkdir -p /var/backups/mariadb
-  cat >/usr/local/sbin/db-platform-backup.sh <<BACKUP
+  msg_header "Configuring Backup Engine"
+  mkdir -p /var/backups/mariadb "$BACKUP_ENGINE_DIR"
+  chown root:www-data /var/backups/mariadb "$BACKUP_ENGINE_DIR"
+  chmod 2770 /var/backups/mariadb
+  chmod 750 "$BACKUP_ENGINE_DIR"
+
+  cat >"$BACKUP_DB_CNF" <<EOF
+[client]
+user=${PROVISIONER_DB_USER}
+password=${PROVISIONER_DB_PASS}
+host=localhost
+EOF
+  chown root:www-data "$BACKUP_DB_CNF"
+  chmod 640 "$BACKUP_DB_CNF"
+
+  touch "$BACKUP_LOG_FILE"
+  chown root:www-data "$BACKUP_LOG_FILE"
+  chmod 660 "$BACKUP_LOG_FILE"
+
+  cat >"$BACKUP_SCRIPT_PATH" <<BACKUP
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 BACKUP_DIR="/var/backups/mariadb"
+MYSQL_CNF="${BACKUP_DB_CNF}"
+LOG_FILE="${BACKUP_LOG_FILE}"
+RETENTION_DAYS="${BACKUP_RETENTION_DAYS}"
+SYNC_TARGET="${BACKUP_SYNC_TARGET}"
 STAMP="\${BACKUP_STAMP:-\$(date +%F-%H%M%S)}"
 OUT_FILE="\${BACKUP_FILE:-\$BACKUP_DIR/auto-\$STAMP.sql.gz.enc}"
+umask 077
 mkdir -p "\$BACKUP_DIR"
-if [ "\$#" -gt 0 ]; then
-  mariadb-dump --single-transaction --quick --routines --events --databases "\$@" | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:${MASTER_BACKUP_KEY} -out "\$OUT_FILE"
-else
-  mariadb-dump --all-databases --single-transaction --quick --routines --events | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:${MASTER_BACKUP_KEY} -out "\$OUT_FILE"
+DUMP_BIN="\$(command -v mariadb-dump || command -v mysqldump || true)"
+touch "\$LOG_FILE"
+exec >>"\$LOG_FILE" 2>&1
+if [ -z "\$DUMP_BIN" ]; then
+  echo "[\$(date -Is)] CloudDB backup failed: no dump binary found"
+  exit 1
 fi
-if [ -f /root/.rclone.conf ]; then rclone sync "\$BACKUP_DIR" remote:backup --config /root/.rclone.conf; fi
-find "\$BACKUP_DIR" -type f -name '*.enc' -mtime +30 -delete
+if [ ! -r "\$MYSQL_CNF" ]; then
+  echo "[\$(date -Is)] CloudDB backup failed: MySQL credential file is not readable"
+  exit 1
+fi
+echo "[\$(date -Is)] CloudDB backup started -> \$OUT_FILE"
+if [ "\$#" -gt 0 ]; then
+  "\$DUMP_BIN" --defaults-extra-file="\$MYSQL_CNF" --single-transaction --quick --routines --events --databases "\$@" | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:${MASTER_BACKUP_KEY} -out "\$OUT_FILE"
+else
+  "\$DUMP_BIN" --defaults-extra-file="\$MYSQL_CNF" --all-databases --single-transaction --quick --routines --events | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:${MASTER_BACKUP_KEY} -out "\$OUT_FILE"
+fi
+if [ -n "\$SYNC_TARGET" ] && [ -f /root/.rclone.conf ] && command -v rclone >/dev/null 2>&1; then
+  rclone sync "\$BACKUP_DIR" "\$SYNC_TARGET" --config /root/.rclone.conf || true
+fi
+find "\$BACKUP_DIR" -type f -name '*.enc' -mtime +"\$RETENTION_DAYS" -delete
+echo "[\$(date -Is)] CloudDB backup finished -> \$OUT_FILE"
 BACKUP
-  chmod 700 /usr/local/sbin/db-platform-backup.sh
+  chown root:www-data "$BACKUP_SCRIPT_PATH"
+  chmod 750 "$BACKUP_SCRIPT_PATH"
   systemctl enable cron >/dev/null 2>&1; systemctl start cron
-  (crontab -l 2>/dev/null || true; echo "0 2 * * * /usr/local/sbin/db-platform-backup.sh") | crontab -
+  (crontab -l 2>/dev/null | grep -v 'CloudDB backup schedule' || true; echo "${BACKUP_SCHEDULE} ${BACKUP_SCRIPT_PATH} # CloudDB backup schedule") | crontab -
 }
 
 write_summary() {
   cat > "$SUMMARY_FILE" <<EOF
-SHIELD NODE v5.0 SUCCESSFUL
+CLOUDDB NODE v5.0 SUCCESSFUL
 Agent Key: ${AGENT_API_KEY}
 Backup Key: ${MASTER_BACKUP_KEY}
 Provisioner: ${PROVISIONER_DB_USER}
 Agent Path Restriction: ${HUB_IP}
 phpMyAdmin Alias: ${PMA_ALIAS}
 Backup Directory: /var/backups/mariadb
+Backup Schedule: ${BACKUP_SCHEDULE}
+Backup Log: ${BACKUP_LOG_FILE}
 EOF
-  echo -e "\n${CLR_BOLD}${CLR_GREEN}Enterprise Node Online!${RESET:-}"
+  echo -e "\n${CLR_BOLD}${CLR_GREEN}CloudDB Node Online!${RESET:-}"
 }
 
 main() {
-  clear; require_ubuntu; wizard; install_packages; configure_mariadb; configure_phpmyadmin; deploy_agent; systemctl restart apache2; configure_firewall; write_backup_script; write_summary
+  clear; require_ubuntu; wizard; install_packages; configure_mariadb; write_backup_script; configure_phpmyadmin; deploy_agent; systemctl restart apache2; configure_firewall; write_summary
 }
 
 main "$@"
