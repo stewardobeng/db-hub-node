@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>DB-Shield | Plan Management</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary": "#526074",
+              "surface-container-high": "#e2e7ff",
+              "on-surface": "#113069",
+              "outline-variant": "#98b1f2",
+              "tertiary-container": "#69f6b8",
+              "secondary-container": "#d5e3fc",
+              "on-primary": "#f8f7ff",
+              "on-tertiary-container": "#005a3c",
+              "on-secondary-container": "#455367",
+              "surface-dim": "#cdd9ff",
+              "outline": "#6079b7",
+              "inverse-surface": "#060e20",
+              "surface-tint": "#0053db",
+              "tertiary-fixed-dim": "#58e7ab",
+              "surface": "#faf8ff",
+              "primary-fixed": "#dbe1ff",
+              "inverse-on-surface": "#959cb5",
+              "background": "#faf8ff",
+              "error-container": "#fe8983",
+              "on-primary-container": "#0048bf",
+              "on-secondary-fixed": "#324053",
+              "on-primary-fixed": "#003798",
+              "primary-fixed-dim": "#c7d3ff",
+              "error": "#9f403d",
+              "secondary-dim": "#465468",
+              "on-secondary-fixed-variant": "#4e5c71",
+              "inverse-primary": "#618bff",
+              "primary-container": "#dbe1ff",
+              "on-surface-variant": "#445d99",
+              "on-background": "#113069",
+              "secondary-fixed-dim": "#c7d5ed",
+              "primary-dim": "#0048c1",
+              "on-tertiary": "#e6ffee",
+              "primary": "#0053db",
+              "surface-bright": "#faf8ff",
+              "on-error-container": "#752121",
+              "tertiary-dim": "#005f40",
+              "surface-variant": "#d9e2ff",
+              "tertiary": "#006d4a",
+              "surface-container-lowest": "#ffffff",
+              "error-dim": "#4e0309",
+              "surface-container": "#eaedff",
+              "on-tertiary-fixed-variant": "#006544",
+              "on-secondary": "#f8f8ff",
+              "on-tertiary-fixed": "#00452d",
+              "on-primary-fixed-variant": "#0050d4",
+              "surface-container-low": "#f2f3ff",
+              "secondary-fixed": "#d5e3fc",
+              "on-error": "#fff7f6",
+              "surface-container-highest": "#d9e2ff",
+              "tertiary-fixed": "#69f6b8"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface antialiased">
+<!-- SideNavBar -->
+<aside class="h-screen w-64 fixed left-0 top-0 border-r-0 bg-[#f2f3ff] dark:bg-slate-900 flex flex-col p-4 z-50">
+<div class="flex items-center gap-3 px-2 mb-8">
+<div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined text-lg" data-icon="shield">shield</span>
+</div>
+<div>
+<h1 class="text-xl font-bold text-[#0f172a] dark:text-slate-100 leading-tight">DB-Shield</h1>
+<p class="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold">Infrastructure Control</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-[#445d99] dark:text-slate-400 hover:bg-[#d9e2ff] dark:hover:bg-slate-800 transition-colors duration-200 rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-[#445d99] dark:text-slate-400 hover:bg-[#d9e2ff] dark:hover:bg-slate-800 transition-colors duration-200 rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="database">database</span>
+<span class="font-medium">Databases</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-[#445d99] dark:text-slate-400 hover:bg-[#d9e2ff] dark:hover:bg-slate-800 transition-colors duration-200 rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="groups">groups</span>
+<span class="font-medium">Tenants</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-[#445d99] dark:text-slate-400 hover:bg-[#d9e2ff] dark:hover:bg-slate-800 transition-colors duration-200 rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="backup">backup</span>
+<span class="font-medium">Backups</span>
+</a>
+<!-- Active Navigation Item: Plans -->
+<a class="flex items-center gap-3 px-3 py-2 bg-[#ffffff] dark:bg-slate-800 text-[#0053db] dark:text-blue-300 font-bold rounded-lg shadow-sm scale-[0.98]" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-medium">Plans</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-[#445d99] dark:text-slate-400 hover:bg-[#d9e2ff] dark:hover:bg-slate-800 transition-colors duration-200 rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="font-medium">Activity Logs</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-[#445d99] dark:text-slate-400 hover:bg-[#d9e2ff] dark:hover:bg-slate-800 transition-colors duration-200 rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-medium">Settings</span>
+</a>
+</nav>
+<div class="mt-auto pt-4">
+<button class="w-full flex items-center justify-center gap-2 py-3 bg-primary text-on-primary rounded-xl font-bold hover:bg-primary-dim transition-all shadow-md active:scale-95">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+<span>New Database</span>
+</button>
+</div>
+</aside>
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-[#faf8ff]/80 dark:bg-slate-950/80 backdrop-blur-md z-40 flex justify-between items-center px-8 ml-64">
+<div class="flex items-center bg-surface-container-low px-4 py-2 rounded-full w-96 border border-outline-variant/10">
+<span class="material-symbols-outlined text-on-surface-variant mr-2" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-full placeholder:text-on-surface-variant/50" placeholder="Search plans or billing..." type="text"/>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4 text-sm font-medium">
+<a class="text-[#445d99] dark:text-slate-400 hover:text-[#0053db]" href="#">Documentation</a>
+<a class="text-[#445d99] dark:text-slate-400 hover:text-[#0053db]" href="#">Support</a>
+<a class="text-[#445d99] dark:text-slate-400 hover:text-[#0053db]" href="#">API</a>
+</div>
+<div class="h-6 w-px bg-outline-variant/20"></div>
+<div class="flex items-center gap-3">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden border border-outline-variant/30">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="close-up portrait of a professional system administrator in a brightly lit office setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBN2ZUXagWIeJutSFLf6G37b6XfY1vPi-H1s0XyQ6x20Dt55H6qK5aFRMjCsCmvxm30NiY1aRxaFKBuUcftFQRONn5MZBIHUuvjwBVwuMz_KWCW5dSZ002hn9ofVWHUjwIK54NK27G04rIoa4w_FlQeyXobSt3joITtquDI4t0ma8aUwRLxSNaq9jDPHdGjDUbfzhtmj3io5UyvMAux7FAiAysQMgECblFZwOps0ZGKkeW8DuUVbVrsMePS3SyGQyXtjXm_2buoPk-9"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-24 px-8 pb-12 min-h-screen">
+<!-- Page Header -->
+<div class="flex justify-between items-end mb-10">
+<div>
+<nav class="flex items-center gap-2 text-xs font-bold text-on-surface-variant/60 uppercase tracking-widest mb-2">
+<span>Infrastructure</span>
+<span class="material-symbols-outlined text-[10px]" data-icon="chevron_right">chevron_right</span>
+<span class="text-primary">Plan Management</span>
+</nav>
+<h2 class="text-4xl font-extrabold tracking-tight text-on-surface">Service Tiers</h2>
+<p class="text-on-surface-variant mt-2 max-w-xl">Configure and monitor database infrastructure packages. Changes to limits will propagate to new tenants automatically.</p>
+</div>
+<div class="flex gap-3">
+<button class="px-6 py-2.5 bg-surface-container-lowest text-primary font-bold rounded-lg border border-outline-variant/20 hover:bg-surface-container-low transition-all shadow-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="file_download">file_download</span>
+                    Export Config
+                </button>
+<button class="px-6 py-2.5 bg-primary text-on-primary font-bold rounded-lg hover:bg-primary-dim transition-all shadow-md flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="add_circle">add_circle</span>
+                    Create Plan
+                </button>
+</div>
+</div>
+<!-- Plan Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+<!-- Basic Plan -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border border-transparent flex flex-col relative overflow-hidden group hover:shadow-lg transition-shadow duration-300">
+<div class="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+<span class="material-symbols-outlined text-8xl" data-icon="speed">speed</span>
+</div>
+<div class="flex justify-between items-start mb-6">
+<div>
+<span class="px-3 py-1 bg-surface-container text-on-surface-variant text-[10px] font-bold uppercase tracking-wider rounded-full">Entry Level</span>
+<h3 class="text-2xl font-bold mt-3">Basic</h3>
+</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+<div class="mb-8">
+<span class="text-4xl font-extrabold text-on-surface">$29</span>
+<span class="text-on-surface-variant font-medium">/ month</span>
+</div>
+<div class="space-y-5 flex-1">
+<div class="flex justify-between items-center pb-4 border-b border-surface-container-low">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary/60" data-icon="database">database</span>
+<span class="text-sm font-medium text-on-surface-variant">Database Limit</span>
+</div>
+<span class="font-bold text-on-surface">5 Nodes</span>
+</div>
+<div class="flex justify-between items-center pb-4 border-b border-surface-container-low">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary/60" data-icon="storage">storage</span>
+<span class="text-sm font-medium text-on-surface-variant">Storage Quota</span>
+</div>
+<span class="font-bold text-on-surface">20 GB</span>
+</div>
+<div class="flex justify-between items-center pb-4 border-b border-surface-container-low">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary/60" data-icon="sync_alt">sync_alt</span>
+<span class="text-sm font-medium text-on-surface-variant">Max Connections</span>
+</div>
+<span class="font-bold text-on-surface">150</span>
+</div>
+<div class="flex justify-between items-center pt-2">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-tertiary" data-icon="group">group</span>
+<span class="text-sm font-medium text-on-surface-variant">Active Tenants</span>
+</div>
+<span class="px-2 py-0.5 bg-tertiary-container text-on-tertiary-container text-xs font-bold rounded-full">142</span>
+</div>
+</div>
+<button class="mt-10 w-full py-3 border border-outline-variant/30 text-on-surface font-bold rounded-lg hover:bg-surface-container-low transition-all flex items-center justify-center gap-2 group-hover:border-primary group-hover:text-primary">
+<span class="material-symbols-outlined text-lg" data-icon="edit">edit</span>
+                    Edit Plan Details
+                </button>
+</div>
+<!-- Professional Plan -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border-2 border-primary relative flex flex-col shadow-xl shadow-primary/5">
+<div class="absolute top-0 right-8 -translate-y-1/2 bg-primary text-on-primary px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 shadow-md">
+<span class="material-symbols-outlined text-xs" data-icon="star" data-weight="fill">star</span>
+                    Most Popular
+                </div>
+<div class="flex justify-between items-start mb-6">
+<div>
+<span class="px-3 py-1 bg-primary-container text-on-primary-container text-[10px] font-bold uppercase tracking-wider rounded-full">Scale Ready</span>
+<h3 class="text-2xl font-bold mt-3">Professional</h3>
+</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+<div class="mb-8">
+<span class="text-4xl font-extrabold text-on-surface">$149</span>
+<span class="text-on-surface-variant font-medium">/ month</span>
+</div>
+<div class="space-y-5 flex-1">
+<div class="flex justify-between items-center pb-4 border-b border-surface-container-low">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="database">database</span>
+<span class="text-sm font-medium text-on-surface-variant">Database Limit</span>
+</div>
+<span class="font-bold text-on-surface text-lg">25 Nodes</span>
+</div>
+<div class="flex justify-between items-center pb-4 border-b border-surface-container-low">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="storage">storage</span>
+<span class="text-sm font-medium text-on-surface-variant">Storage Quota</span>
+</div>
+<span class="font-bold text-on-surface text-lg">250 GB</span>
+</div>
+<div class="flex justify-between items-center pb-4 border-b border-surface-container-low">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="sync_alt">sync_alt</span>
+<span class="text-sm font-medium text-on-surface-variant">Max Connections</span>
+</div>
+<span class="font-bold text-on-surface text-lg">1,000</span>
+</div>
+<div class="flex justify-between items-center pt-2">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-tertiary" data-icon="group">group</span>
+<span class="text-sm font-medium text-on-surface-variant">Active Tenants</span>
+</div>
+<span class="px-2 py-0.5 bg-tertiary-container text-on-tertiary-container text-xs font-bold rounded-full">84</span>
+</div>
+</div>
+<button class="mt-10 w-full py-3 bg-primary text-on-primary font-bold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="edit">edit</span>
+                    Edit Plan Details
+                </button>
+</div>
+<!-- Enterprise Plan -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border border-transparent flex flex-col relative overflow-hidden group hover:shadow-lg transition-shadow duration-300">
+<div class="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+<span class="material-symbols-outlined text-8xl" data-icon="rocket_launch">rocket_launch</span>
+</div>
+<div class="flex justify-between items-start mb-6">
+<div>
+<span class="px-3 py-1 bg-inverse-surface text-inverse-on-surface text-[10px] font-bold uppercase tracking-wider rounded-full">Unrestricted</span>
+<h3 class="text-2xl font-bold mt-3">Enterprise</h3>
+</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+<div class="mb-8">
+<span class="text-4xl font-extrabold text-on-surface">$599</span>
+<span class="text-on-surface-variant font-medium">/ month</span>
+</div>
+<div class="space-y-5 flex-1">
+<div class="flex justify-between items-center pb-4 border-b border-surface-container-low">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary/60" data-icon="database">database</span>
+<span class="text-sm font-medium text-on-surface-variant">Database Limit</span>
+</div>
+<span class="font-bold text-on-surface">Unlimited</span>
+</div>
+<div class="flex justify-between items-center pb-4 border-b border-surface-container-low">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary/60" data-icon="storage">storage</span>
+<span class="text-sm font-medium text-on-surface-variant">Storage Quota</span>
+</div>
+<span class="font-bold text-on-surface">2 TB</span>
+</div>
+<div class="flex justify-between items-center pb-4 border-b border-surface-container-low">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary/60" data-icon="sync_alt">sync_alt</span>
+<span class="text-sm font-medium text-on-surface-variant">Max Connections</span>
+</div>
+<span class="font-bold text-on-surface">10,000</span>
+</div>
+<div class="flex justify-between items-center pt-2">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-tertiary" data-icon="group">group</span>
+<span class="text-sm font-medium text-on-surface-variant">Active Tenants</span>
+</div>
+<span class="px-2 py-0.5 bg-tertiary-container text-on-tertiary-container text-xs font-bold rounded-full">21</span>
+</div>
+</div>
+<button class="mt-10 w-full py-3 border border-outline-variant/30 text-on-surface font-bold rounded-lg hover:bg-surface-container-low transition-all flex items-center justify-center gap-2 group-hover:border-primary group-hover:text-primary">
+<span class="material-symbols-outlined text-lg" data-icon="edit">edit</span>
+                    Edit Plan Details
+                </button>
+</div>
+</div>
+<!-- Infrastructure Status / Bento Section -->
+<div class="mt-12 grid grid-cols-1 md:grid-cols-4 gap-6">
+<div class="md:col-span-2 bg-surface-container-low rounded-xl p-6 flex flex-col justify-between">
+<div>
+<h4 class="text-lg font-bold mb-1">Global Revenue Distribution</h4>
+<p class="text-sm text-on-surface-variant mb-4">Allocation of tenants across infrastructure tiers.</p>
+</div>
+<div class="flex items-end gap-2 h-32 mb-4">
+<div class="flex-1 bg-surface-container-highest rounded-t-lg transition-all hover:bg-primary/40 h-[60%] relative group">
+<span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Basic</span>
+</div>
+<div class="flex-1 bg-primary rounded-t-lg transition-all hover:brightness-110 h-[85%] relative group">
+<span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Pro</span>
+</div>
+<div class="flex-1 bg-surface-container-highest rounded-t-lg transition-all hover:bg-primary/40 h-[30%] relative group">
+<span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Ent</span>
+</div>
+<div class="flex-1 bg-surface-container-highest rounded-t-lg transition-all hover:bg-primary/40 h-[10%] relative group">
+<span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Custom</span>
+</div>
+</div>
+<div class="flex justify-between text-xs font-bold text-on-surface-variant uppercase tracking-tighter">
+<span>Basic: 58%</span>
+<span>Pro: 34%</span>
+<span>Ent: 8%</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm border border-outline-variant/10 flex flex-col items-center justify-center text-center">
+<span class="material-symbols-outlined text-4xl text-tertiary mb-3" data-icon="monetization_on">monetization_on</span>
+<span class="text-2xl font-extrabold">$42.8k</span>
+<span class="text-xs font-bold text-on-surface-variant uppercase tracking-widest mt-1">Monthly MRR</span>
+<div class="mt-4 flex items-center gap-1 text-tertiary text-xs font-bold">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span>
+                    12.4%
+                </div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm border border-outline-variant/10 flex flex-col items-center justify-center text-center">
+<span class="material-symbols-outlined text-4xl text-primary mb-3" data-icon="hub">hub</span>
+<span class="text-2xl font-extrabold">247</span>
+<span class="text-xs font-bold text-on-surface-variant uppercase tracking-widest mt-1">Total Tenants</span>
+<div class="mt-4 flex items-center gap-1 text-primary text-xs font-bold">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+                    3 today
+                </div>
+</div>
+</div>
+<!-- Recent Plan Updates -->
+<div class="mt-12 bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm border border-outline-variant/5">
+<div class="px-8 py-5 border-b border-surface-container-low flex justify-between items-center">
+<h4 class="font-bold text-lg">Configuration Audit Log</h4>
+<button class="text-primary text-sm font-bold flex items-center gap-1">
+                    View All
+                    <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<table class="w-full text-left">
+<thead>
+<tr class="bg-surface-container-low/30">
+<th class="px-8 py-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Plan Name</th>
+<th class="px-8 py-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Modified Parameter</th>
+<th class="px-8 py-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Old Value</th>
+<th class="px-8 py-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">New Value</th>
+<th class="px-8 py-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest text-right">Timestamp</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-low">
+<tr class="hover:bg-surface-container-low/20 transition-colors">
+<td class="px-8 py-4">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="font-bold text-sm">Professional</span>
+</div>
+</td>
+<td class="px-8 py-4 text-sm">Max Connections</td>
+<td class="px-8 py-4 text-sm text-on-surface-variant line-through">500</td>
+<td class="px-8 py-4 text-sm font-bold">1,000</td>
+<td class="px-8 py-4 text-xs font-medium text-on-surface-variant text-right">2 hours ago</td>
+</tr>
+<tr class="hover:bg-surface-container-low/20 transition-colors">
+<td class="px-8 py-4">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-[#0f172a]"></div>
+<span class="font-bold text-sm">Enterprise</span>
+</div>
+</td>
+<td class="px-8 py-4 text-sm">Storage Quota</td>
+<td class="px-8 py-4 text-sm text-on-surface-variant line-through">1 TB</td>
+<td class="px-8 py-4 text-sm font-bold">2 TB</td>
+<td class="px-8 py-4 text-xs font-medium text-on-surface-variant text-right">Yesterday, 14:22</td>
+</tr>
+</tbody>
+</table>
+</div>
+</main>
+<!-- Contextual FAB (Only for Main Management) -->
+<div class="fixed bottom-8 right-8 z-50">
+<button class="w-14 h-14 bg-primary text-on-primary rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-2xl" data-icon="bolt">bolt</span>
+</button>
+</div>
+</body></html>

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Add Node - DB-Shield</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-secondary": "#f8f8ff",
+              "tertiary": "#006d4a",
+              "on-primary-fixed": "#003798",
+              "on-tertiary-fixed-variant": "#006544",
+              "on-tertiary-fixed": "#00452d",
+              "secondary-container": "#d5e3fc",
+              "tertiary-fixed-dim": "#58e7ab",
+              "on-primary-container": "#0048bf",
+              "primary-dim": "#0048c1",
+              "surface-bright": "#faf8ff",
+              "surface-container-highest": "#d9e2ff",
+              "error-container": "#fe8983",
+              "on-surface": "#113069",
+              "primary-fixed": "#dbe1ff",
+              "on-secondary-fixed-variant": "#4e5c71",
+              "inverse-on-surface": "#959cb5",
+              "outline": "#6079b7",
+              "on-primary-fixed-variant": "#0050d4",
+              "surface": "#faf8ff",
+              "error-dim": "#4e0309",
+              "on-error-container": "#752121",
+              "secondary-fixed-dim": "#c7d5ed",
+              "outline-variant": "#98b1f2",
+              "surface-dim": "#cdd9ff",
+              "surface-container-lowest": "#ffffff",
+              "on-surface-variant": "#445d99",
+              "secondary-dim": "#465468",
+              "surface-container": "#eaedff",
+              "on-secondary-fixed": "#324053",
+              "on-error": "#fff7f6",
+              "primary": "#0053db",
+              "on-tertiary": "#e6ffee",
+              "on-secondary-container": "#455367",
+              "inverse-surface": "#060e20",
+              "on-background": "#113069",
+              "secondary": "#526074",
+              "tertiary-dim": "#005f40",
+              "tertiary-container": "#69f6b8",
+              "inverse-primary": "#618bff",
+              "primary-fixed-dim": "#c7d3ff",
+              "tertiary-fixed": "#69f6b8",
+              "primary-container": "#dbe1ff",
+              "secondary-fixed": "#d5e3fc",
+              "on-primary": "#f8f7ff",
+              "background": "#faf8ff",
+              "surface-variant": "#d9e2ff",
+              "on-tertiary-container": "#005a3c",
+              "surface-container-low": "#f2f3ff",
+              "surface-container-high": "#e2e7ff",
+              "error": "#9f403d",
+              "surface-tint": "#0053db"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- Sidebar (Shared Component) -->
+<aside class="fixed left-0 top-0 h-full flex flex-col p-4 bg-slate-50 dark:bg-slate-900 h-screen w-64 border-r-0 z-10">
+<div class="flex items-center gap-3 mb-8 px-2">
+<div class="w-8 h-8 bg-primary rounded flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">shield</span>
+</div>
+<div>
+<div class="text-xl font-bold text-slate-900 dark:text-slate-50 font-manrope">DB-Shield</div>
+<div class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Infrastructure</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-manrope text-sm font-medium tracking-tight hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span> Overview
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 bg-white dark:bg-slate-950 text-blue-700 dark:text-blue-400 shadow-sm rounded-md font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dns</span> Nodes
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-manrope text-sm font-medium tracking-tight hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">group</span> Tenants
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-manrope text-sm font-medium tracking-tight hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">backup</span> Backups
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-manrope text-sm font-medium tracking-tight hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">receipt_long</span> Plans
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-manrope text-sm font-medium tracking-tight hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">history</span> Activity
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-manrope text-sm font-medium tracking-tight hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">database</span> Databases
+            </a>
+</nav>
+<div class="mt-auto space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-manrope text-sm font-medium tracking-tight hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">person</span> Account
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-manrope text-sm font-medium tracking-tight hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span> Settings
+            </a>
+</div>
+</aside>
+<!-- Top Navigation (Shared Component) -->
+<header class="flex justify-between items-center h-16 px-8 ml-64 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 fixed top-0 right-0 left-0 z-0">
+<div class="flex items-center gap-4 bg-surface-container-low px-3 py-1.5 rounded-lg border border-outline-variant/10">
+<span class="material-symbols-outlined text-on-surface-variant text-xl">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-64 placeholder:text-on-surface-variant/60 font-body" placeholder="Search infrastructure..." type="text"/>
+</div>
+<div class="flex items-center gap-6">
+<button class="text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-300">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<div class="flex items-center gap-3 pl-6 border-l border-slate-100 dark:border-slate-800">
+<div class="text-right">
+<div class="text-sm font-semibold font-manrope">Admin User</div>
+<div class="text-[10px] text-on-surface-variant uppercase tracking-tighter">Superadmin</div>
+</div>
+<img class="w-8 h-8 rounded-full border border-outline-variant/30" data-alt="Portrait of a male system administrator in a professional setting with soft office lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAUJEmSgmDv2moLxoGv7RdROFdm_DNQk6J9W0TmOhpBiNNjSmmUJjAR0_bb-Rie0EfvidqqJyO99gupSIYPtnX__mYtlIjUXpHqzUzEeoKwVJjr5daUd_pGC_MxjIoSLt5fb3xkYiKtvVFeAnrXzpnAQAiXm6I4_Poi5cl5E_lQRoSc1przo-tkutqER77DA1l5UZOzFYesEaG4eNHY05hUa08zyUKYJeN8gjojhl8FkGKlHmK9YvvhRHb247lJyGWxLbPt-AjZpQ7c"/>
+</div>
+</div>
+</header>
+<!-- Main Content (Background Page - Nodes List) -->
+<main class="ml-64 mt-16 p-8 min-h-screen bg-surface">
+<div class="flex justify-between items-end mb-10">
+<div>
+<h1 class="text-3xl font-extrabold text-on-surface tracking-tight mb-2">Nodes</h1>
+<p class="text-on-surface-variant font-body">Manage your distributed database clusters and connection endpoints.</p>
+</div>
+<button class="bg-primary text-on-primary px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 shadow-lg shadow-primary/20 hover:opacity-90 transition-all">
+<span class="material-symbols-outlined">add</span>
+                Add Node
+            </button>
+</div>
+<!-- Bento Grid for Nodes -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Node Card 1 -->
+<div class="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/20 shadow-sm">
+<div class="flex justify-between items-start mb-6">
+<div class="w-10 h-10 rounded-lg bg-tertiary-container flex items-center justify-center text-on-tertiary-container">
+<span class="material-symbols-outlined">dns</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-tertiary-container text-on-tertiary-container text-[10px] font-bold uppercase tracking-wider">Healthy</span>
+</div>
+<h3 class="text-lg font-bold text-on-surface mb-1">US-East Primary</h3>
+<p class="text-sm text-on-surface-variant mb-6 font-body">10.0.42.11 • AWS Virginia</p>
+<div class="grid grid-cols-2 gap-4 pt-4 border-t border-surface-container">
+<div>
+<div class="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Latency</div>
+<div class="text-xl font-bold text-on-surface">14ms</div>
+</div>
+<div>
+<div class="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Load</div>
+<div class="text-xl font-bold text-on-surface text-tertiary">12%</div>
+</div>
+</div>
+</div>
+<!-- Node Card 2 -->
+<div class="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/20 shadow-sm">
+<div class="flex justify-between items-start mb-6">
+<div class="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined">dns</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-tertiary-container text-on-tertiary-container text-[10px] font-bold uppercase tracking-wider">Healthy</span>
+</div>
+<h3 class="text-lg font-bold text-on-surface mb-1">EU-West Mirror</h3>
+<p class="text-sm text-on-surface-variant mb-6 font-body">192.168.1.5 • Hetzner DE</p>
+<div class="grid grid-cols-2 gap-4 pt-4 border-t border-surface-container">
+<div>
+<div class="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Latency</div>
+<div class="text-xl font-bold text-on-surface">42ms</div>
+</div>
+<div>
+<div class="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Load</div>
+<div class="text-xl font-bold text-on-surface text-tertiary">34%</div>
+</div>
+</div>
+</div>
+<!-- Empty State / Add Mock -->
+<div class="bg-surface-container-low p-6 rounded-xl border-2 border-dashed border-outline-variant/30 flex flex-col items-center justify-center text-center opacity-60">
+<div class="w-12 h-12 rounded-full border border-outline-variant flex items-center justify-center mb-4">
+<span class="material-symbols-outlined text-outline">add</span>
+</div>
+<p class="text-sm font-semibold text-on-surface-variant">Register New Node</p>
+</div>
+</div>
+</main>
+<!-- Slide-out Drawer Overlay -->
+<div class="fixed inset-0 bg-inverse-surface/40 backdrop-blur-sm z-40"></div>
+<!-- Add Node Drawer -->
+<div class="fixed right-0 top-0 h-full w-[480px] bg-surface-container-lowest shadow-2xl z-50 flex flex-col border-l border-outline-variant/20 transition-transform">
+<!-- Drawer Header -->
+<div class="p-8 border-b border-surface-container">
+<div class="flex justify-between items-start">
+<div>
+<h2 class="text-2xl font-extrabold text-on-surface tracking-tight mb-1">Add Node</h2>
+<p class="text-on-surface-variant text-sm font-body">Register a new physical or virtual node to your cluster.</p>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-on-surface">close</span>
+</button>
+</div>
+</div>
+<!-- Drawer Body (Scrollable Form) -->
+<div class="flex-1 overflow-y-auto p-8 space-y-8">
+<!-- Display Name Section -->
+<div class="space-y-2">
+<label class="block text-sm font-bold text-on-surface font-label">Display Name</label>
+<input class="w-full bg-surface-container-low border-none rounded-lg p-3 text-sm focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all font-body" placeholder="e.g. Production-Main-01" type="text"/>
+<p class="text-xs text-on-surface-variant/80 font-body">A friendly name to identify this node in your dashboard.</p>
+</div>
+<!-- Host / IP Section -->
+<div class="space-y-2">
+<label class="block text-sm font-bold text-on-surface font-label">Database Host / IP</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-xl">language</span>
+<input class="w-full bg-surface-container-low border-none rounded-lg p-3 pl-11 text-sm focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all font-body" placeholder="10.0.0.1 or db.example.com" type="text"/>
+</div>
+<p class="text-xs text-on-surface-variant/80 font-body">The internal network address where the database engine is listening.</p>
+</div>
+<!-- Public Endpoint Section -->
+<div class="space-y-2">
+<label class="block text-sm font-bold text-on-surface font-label">Public Endpoint</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-xl">hub</span>
+<input class="w-full bg-surface-container-low border-none rounded-lg p-3 pl-11 text-sm focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all font-body" placeholder="https://node-01.dbshield.io" type="text"/>
+</div>
+<p class="text-xs text-on-surface-variant/80 font-body">External URL used for synchronization and management API access.</p>
+</div>
+<!-- Agent Access Token Section -->
+<div class="space-y-2">
+<label class="block text-sm font-bold text-on-surface font-label">Agent Access Token</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-xl">key</span>
+<input class="w-full bg-surface-container-low border-none rounded-lg p-3 pl-11 text-sm focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all font-body" type="password" value="••••••••••••••••"/>
+</div>
+<p class="text-xs text-on-surface-variant/80 font-body">Located in your DB-Shield agent config file under 'auth_token'.</p>
+</div>
+<!-- phpMyAdmin Alias Section -->
+<div class="space-y-2">
+<label class="block text-sm font-bold text-on-surface font-label">phpMyAdmin Alias</label>
+<div class="flex gap-2">
+<div class="bg-surface-container px-3 py-3 rounded-lg text-xs font-mono text-on-surface-variant flex items-center">/pma-</div>
+<input class="flex-1 bg-surface-container-low border-none rounded-lg p-3 text-sm focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all font-body" placeholder="internal-tool" type="text"/>
+</div>
+<p class="text-xs text-on-surface-variant/80 font-body">Unique path suffix for direct database management access.</p>
+</div>
+<!-- Security Info Box -->
+<div class="bg-surface-container-low p-4 rounded-xl flex gap-4 border border-outline-variant/10">
+<span class="material-symbols-outlined text-primary">verified_user</span>
+<p class="text-xs text-on-surface-variant leading-relaxed">
+                    By saving this node, you authorize DB-Shield to perform health checks and automated backup procedures on the specified host. Ensure your firewall allows traffic from DB-Shield IP ranges.
+                </p>
+</div>
+</div>
+<!-- Drawer Footer -->
+<div class="p-8 bg-surface-container-low border-t border-outline-variant/10 flex items-center gap-4">
+<button class="flex-1 px-6 py-3 rounded-lg font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors font-label">
+                Cancel
+            </button>
+<button class="flex-[1.5] px-6 py-3 bg-primary text-on-primary rounded-lg font-bold shadow-lg shadow-primary/25 hover:opacity-90 transition-all flex items-center justify-center gap-2 font-label">
+<span class="material-symbols-outlined text-xl">save</span>
+                Save and Test Connection
+            </button>
+</div>
+</div>
+</body></html>

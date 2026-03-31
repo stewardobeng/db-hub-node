@@ -52,15 +52,59 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
-TARGET_SCOPE="${1:-${TARGET_SCOPE:-}}"
+SCRIPT_SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+TARGET_SCOPE="${TARGET_SCOPE:-}"
 PURGE_PACKAGES="${PURGE_PACKAGES:-}"
+REMOVE_REPO="${REMOVE_REPO:-}"
 REMOVE_HUB=0
 REMOVE_NODE=0
 PURGE_PACKAGES_FLAG=0
+REMOVE_REPO_FLAG=0
 HUB_PRESENT=0
 NODE_PRESENT=0
 SHARED_WEB_STACK_REQUIRED=0
 PURGE_SHARED_WEB_STACK=0
+REPO_DIR=""
+
+parse_cli_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            hub|node|all)
+                if [[ -n "$TARGET_SCOPE" && "$TARGET_SCOPE" != "$1" ]]; then
+                    msg_err "Target already set to '$TARGET_SCOPE'. Remove the extra target argument."
+                    exit 1
+                fi
+                TARGET_SCOPE="$1"
+                ;;
+            --remove-repo)
+                REMOVE_REPO=1
+                ;;
+            --keep-repo)
+                REMOVE_REPO=0
+                ;;
+            --help|-h)
+                cat <<'EOF'
+Usage: sudo ./uninstall-db-platform.sh [hub|node|all] [--remove-repo|--keep-repo]
+
+Targets:
+  hub   Remove the deployed Hub runtime only
+  node  Remove the deployed Node runtime only
+  all   Remove both deployed runtimes
+
+Options:
+  --remove-repo  Also remove the installer checkout directory if it is safely detected
+  --keep-repo    Keep the installer checkout directory
+EOF
+                exit 0
+                ;;
+            *)
+                msg_err "Unknown argument: $1"
+                exit 1
+                ;;
+        esac
+        shift
+    done
+}
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
@@ -96,6 +140,32 @@ node_component_present() {
 detect_existing_state() {
     hub_component_present && HUB_PRESENT=1 || HUB_PRESENT=0
     node_component_present && NODE_PRESENT=1 || NODE_PRESENT=0
+}
+
+repo_checkout_candidate() {
+    local candidate="${1:-}"
+    [[ -n "$candidate" ]] || return 1
+    [[ -d "$candidate" ]] || return 1
+    candidate="$(cd "$candidate" && pwd -P)"
+
+    case "$candidate" in
+        /|/root|/home|/var|/usr|/opt|/srv)
+            return 1
+            ;;
+    esac
+
+    [[ -f "$candidate/install-db-hub.sh" ]] || return 1
+    [[ -f "$candidate/install-db-node.sh" ]] || return 1
+    [[ -f "$candidate/uninstall-db-platform.sh" ]] || return 1
+}
+
+detect_repo_checkout() {
+    if repo_checkout_candidate "$SCRIPT_SOURCE_DIR"; then
+        REPO_DIR="$(cd "$SCRIPT_SOURCE_DIR" && pwd -P)"
+        return
+    fi
+
+    REPO_DIR=""
 }
 
 compute_cleanup_plan() {
@@ -184,6 +254,31 @@ choose_package_mode() {
     fi
 }
 
+choose_repo_mode() {
+    if [[ -z "$REPO_DIR" ]]; then
+        REMOVE_REPO_FLAG=0
+        return
+    fi
+
+    if [[ -n "$REMOVE_REPO" ]]; then
+        if [[ "$REMOVE_REPO" =~ ^([Yy]|1|true|yes)$ ]]; then
+            REMOVE_REPO_FLAG=1
+        else
+            REMOVE_REPO_FLAG=0
+        fi
+        return
+    fi
+
+    echo
+    msg_info "Installer checkout detected at: $REPO_DIR"
+    read -r -p "$(echo -e "${CLR_BOLD}Also remove the installer checkout directory after uninstall? [y/N]: ${CLR_RESET}")" remove_repo_answer
+    if [[ "$remove_repo_answer" =~ ^[Yy]$ ]]; then
+        REMOVE_REPO_FLAG=1
+    else
+        REMOVE_REPO_FLAG=0
+    fi
+}
+
 confirm_scope() {
     clear
     echo -e "${CLR_BOLD}${CLR_RED}"
@@ -209,6 +304,7 @@ confirm_scope() {
     fi
     [[ $REMOVE_HUB -eq 1 && $HUB_PRESENT -eq 0 ]] && echo "  - Hub artifacts were not detected; cleanup will still scan common leftovers"
     [[ $REMOVE_NODE -eq 1 && $NODE_PRESENT -eq 0 ]] && echo "  - Node artifacts were not detected; cleanup will still scan common leftovers"
+    [[ $REMOVE_REPO_FLAG -eq 1 ]] && echo "  - Installer checkout directory: ${REPO_DIR}"
     echo -e "\n${CLR_BOLD}${CLR_YELLOW}This action cannot be undone.${CLR_RESET}"
 
     read -r -p "$(echo -e "\n${CLR_BOLD}Are you absolutely sure you want to proceed? (y/n): ${CLR_RESET}")" confirm
@@ -322,6 +418,21 @@ restart_remaining_services() {
     fi
 }
 
+cleanup_repo_checkout() {
+    if [[ $REMOVE_REPO_FLAG -eq 0 ]]; then
+        return
+    fi
+
+    if ! repo_checkout_candidate "$REPO_DIR"; then
+        msg_warn "Installer checkout path no longer looks safe to remove. Skipping repo cleanup."
+        return
+    fi
+
+    msg_header "Removing Installer Checkout"
+    cd / || true
+    run_with_spinner "Removing installer checkout" env REPO_DIR="$REPO_DIR" bash -c 'cd / && rm -rf -- "$REPO_DIR"'
+}
+
 print_summary() {
     echo -e "\n${CLR_BOLD}${CLR_GREEN}===================================================="
     echo "       Uninstallation Completed Successfully!       "
@@ -329,13 +440,17 @@ print_summary() {
     msg_info "Removed target: ${TARGET_SCOPE}"
     msg_info "Package purge: $([[ $PURGE_PACKAGES_FLAG -eq 1 ]] && echo enabled || echo skipped)"
     msg_info "Shared web stack: $([[ $PURGE_SHARED_WEB_STACK -eq 1 ]] && echo purged || echo retained)"
+    msg_info "Installer checkout: $([[ $REMOVE_REPO_FLAG -eq 1 ]] && echo removed || echo retained)"
 }
 
 main() {
+    parse_cli_args "$@"
     choose_scope
     set_scope_flags
     detect_existing_state
+    detect_repo_checkout
     choose_package_mode
+    choose_repo_mode
     compute_cleanup_plan
     confirm_scope
     stop_services
@@ -344,6 +459,7 @@ main() {
     cleanup_packages
     reset_firewall
     restart_remaining_services
+    cleanup_repo_checkout
     print_summary
 }
 

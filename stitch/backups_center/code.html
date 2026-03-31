@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Backups Center | DB-Shield</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary": "#526074",
+              "surface-container-high": "#e2e7ff",
+              "on-surface": "#113069",
+              "outline-variant": "#98b1f2",
+              "tertiary-container": "#69f6b8",
+              "secondary-container": "#d5e3fc",
+              "on-primary": "#f8f7ff",
+              "on-tertiary-container": "#005a3c",
+              "on-secondary-container": "#455367",
+              "surface-dim": "#cdd9ff",
+              "outline": "#6079b7",
+              "inverse-surface": "#060e20",
+              "surface-tint": "#0053db",
+              "tertiary-fixed-dim": "#58e7ab",
+              "surface": "#faf8ff",
+              "primary-fixed": "#dbe1ff",
+              "inverse-on-surface": "#959cb5",
+              "background": "#faf8ff",
+              "error-container": "#fe8983",
+              "on-primary-container": "#0048bf",
+              "on-secondary-fixed": "#324053",
+              "on-primary-fixed": "#003798",
+              "primary-fixed-dim": "#c7d3ff",
+              "error": "#9f403d",
+              "secondary-dim": "#465468",
+              "on-secondary-fixed-variant": "#4e5c71",
+              "inverse-primary": "#618bff",
+              "primary-container": "#dbe1ff",
+              "on-surface-variant": "#445d99",
+              "on-background": "#113069",
+              "secondary-fixed-dim": "#c7d5ed",
+              "primary-dim": "#0048c1",
+              "on-tertiary": "#e6ffee",
+              "primary": "#0053db",
+              "surface-bright": "#faf8ff",
+              "on-error-container": "#752121",
+              "tertiary-dim": "#005f40",
+              "surface-variant": "#d9e2ff",
+              "tertiary": "#006d4a",
+              "surface-container-lowest": "#ffffff",
+              "error-dim": "#4e0309",
+              "surface-container": "#eaedff",
+              "on-tertiary-fixed-variant": "#006544",
+              "on-secondary": "#f8f8ff",
+              "on-tertiary-fixed": "#00452d",
+              "on-primary-fixed-variant": "#0050d4",
+              "surface-container-low": "#f2f3ff",
+              "secondary-fixed": "#d5e3fc",
+              "on-error": "#fff7f6",
+              "surface-container-highest": "#d9e2ff",
+              "tertiary-fixed": "#69f6b8"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface antialiased">
+<!-- SideNavBar Shell -->
+<aside class="h-screen w-64 fixed left-0 top-0 border-r-0 bg-[#f2f3ff] dark:bg-slate-900 flex flex-col p-4 z-50">
+<div class="flex items-center gap-3 px-2 mb-8">
+<div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined" data-icon="shield">shield</span>
+</div>
+<div>
+<div class="text-xl font-bold text-[#0f172a] dark:text-slate-100 leading-tight">DB-Shield</div>
+<div class="text-[10px] uppercase tracking-wider text-on-surface-variant font-semibold">Infrastructure Control</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#445d99] hover:bg-[#d9e2ff] transition-colors duration-200 rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-medium text-sm">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#445d99] hover:bg-[#d9e2ff] transition-colors duration-200 rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="database">database</span>
+<span class="font-medium text-sm">Databases</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#445d99] hover:bg-[#d9e2ff] transition-colors duration-200 rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="groups">groups</span>
+<span class="font-medium text-sm">Tenants</span>
+</a>
+<!-- Active State: Backups -->
+<a class="flex items-center gap-3 px-3 py-2.5 bg-[#ffffff] text-[#0053db] font-bold rounded-lg shadow-sm scale-98 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="backup">backup</span>
+<span class="font-bold text-sm">Backups</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#445d99] hover:bg-[#d9e2ff] transition-colors duration-200 rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-medium text-sm">Plans</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#445d99] hover:bg-[#d9e2ff] transition-colors duration-200 rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="font-medium text-sm">Activity Logs</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#445d99] hover:bg-[#d9e2ff] transition-colors duration-200 rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-medium text-sm">Settings</span>
+</a>
+</nav>
+<div class="mt-auto pt-4 border-t border-outline-variant/20">
+<button class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-semibold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+<span class="text-sm">New Database</span>
+</button>
+</div>
+</aside>
+<!-- TopAppBar Shell -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-[#faf8ff]/80 backdrop-blur-md flex justify-between items-center h-16 px-8 ml-64">
+<div class="flex items-center gap-6">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" data-icon="search">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 w-64 transition-all" placeholder="Search infrastructure..." type="text"/>
+</div>
+<nav class="hidden lg:flex items-center gap-6">
+<a class="text-sm font-medium text-[#445d99] hover:text-[#0053db] transition-all" href="#">Documentation</a>
+<a class="text-sm font-medium text-[#445d99] hover:text-[#0053db] transition-all" href="#">Support</a>
+<a class="text-sm font-medium text-[#445d99] hover:text-[#0053db] transition-all" href="#">API</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors focus:ring-2 ring-primary/20 rounded-full">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors focus:ring-2 ring-primary/20 rounded-full">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+<div class="h-8 w-px bg-outline-variant/30 mx-2"></div>
+<div class="flex items-center gap-3 cursor-pointer group">
+<div class="text-right">
+<p class="text-xs font-bold leading-none text-on-surface">Admin User</p>
+<p class="text-[10px] text-on-surface-variant">Systems Architect</p>
+</div>
+<img alt="User Profile" class="w-10 h-10 rounded-full object-cover ring-2 ring-primary-container group-hover:ring-primary transition-all" data-alt="portrait of a professional male engineer with short hair in a clean studio setting with neutral lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNw474Y1NTgJ6fj_xNwe7XsY-WBxnjkp5COO-imNPd8Ue1t6PHkm2xw_3V3xp8_pVhcVt2C5wDyTc-FUqnygR5yiclzcUSkB4KbVsvrSPRZT0gcke-MOLnRNXVx5P3W33nUJwlBU8jI0pFpfKt5dIk-3RcXz7ExaLML89cLAZq4OCaue7gQ-Y3pz0-gv6XvKvhfnEA2bmQ88x_1Na6gIC5N6x1s7VuOx6JwIIQY17skGWS7eUmLacVgKntsEQyPKCWcOjgvdR3I9tI"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-24 pb-12 px-8 min-h-screen">
+<!-- Header & Top Summary -->
+<section class="mb-10">
+<div class="flex justify-between items-end mb-8">
+<div>
+<h1 class="text-3xl font-extrabold text-on-surface tracking-tight">Backups Center</h1>
+<p class="text-on-surface-variant mt-1">Platform-wide data redundancy and recovery console</p>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 bg-surface-container-lowest border border-outline-variant/30 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="download">download</span>
+                        Export Log
+                    </button>
+<button class="px-4 py-2 bg-primary text-on-primary rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm hover:primary-dim transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="play_arrow" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+                        Run Manual Backup
+                    </button>
+</div>
+</div>
+<!-- Summary KPI Bento Grid -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+<div class="bg-surface-container-lowest p-6 rounded-xl border-none flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Scheduled Today</span>
+<span class="material-symbols-outlined text-primary" data-icon="schedule">schedule</span>
+</div>
+<div class="text-4xl font-extrabold text-on-surface">42</div>
+<div class="text-[11px] text-on-surface-variant flex items-center gap-1">
+<span class="text-primary font-bold">12</span> pending execution
+                    </div>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-xl border-none flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Queued</span>
+<span class="material-symbols-outlined text-primary" data-icon="sync">sync</span>
+</div>
+<div class="text-4xl font-extrabold text-on-surface">08</div>
+<div class="text-[11px] text-on-surface-variant flex items-center gap-1">
+                        Currently in transport layer
+                    </div>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-xl border-none flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Completed</span>
+<span class="material-symbols-outlined text-tertiary" data-icon="check_circle">check_circle</span>
+</div>
+<div class="text-4xl font-extrabold text-on-surface">214</div>
+<div class="text-[11px] text-tertiary font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]" data-icon="trending_up">trending_up</span>
+                        98.4% success rate
+                    </div>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-xl border-none flex flex-col gap-4 ring-1 ring-error-container/40">
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Failed Today</span>
+<span class="material-symbols-outlined text-error" data-icon="report">report</span>
+</div>
+<div class="text-4xl font-extrabold text-error">03</div>
+<div class="text-[11px] text-error font-medium flex items-center gap-1">
+                        Requires manual retry
+                    </div>
+</div>
+</div>
+</section>
+<!-- Filters & Table Section -->
+<section class="bg-surface-container-lowest rounded-xl p-1 overflow-hidden">
+<!-- Filter Bar -->
+<div class="px-6 py-5 flex items-center justify-between bg-surface-container-low/30">
+<div class="flex items-center gap-2">
+<span class="text-sm font-bold text-on-surface mr-4">Filter by:</span>
+<button class="px-4 py-1.5 rounded-full bg-primary-container text-on-primary-container text-xs font-bold">All Types</button>
+<button class="px-4 py-1.5 rounded-full bg-surface-container text-on-surface-variant text-xs font-medium hover:bg-surface-container-high transition-colors">Node</button>
+<button class="px-4 py-1.5 rounded-full bg-surface-container text-on-surface-variant text-xs font-medium hover:bg-surface-container-high transition-colors">Tenant</button>
+<button class="px-4 py-1.5 rounded-full bg-surface-container text-on-surface-variant text-xs font-medium hover:bg-surface-container-high transition-colors">Database</button>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative">
+<select class="appearance-none bg-surface-container pl-4 pr-10 py-1.5 rounded-lg text-xs font-medium border-none focus:ring-2 ring-primary/20">
+<option>Last 24 Hours</option>
+<option>Last 7 Days</option>
+<option>Last 30 Days</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-[16px] pointer-events-none" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Data Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-surface-container">
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Type</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Target</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Node</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Requested by</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Requested at</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Status</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-low">
+<!-- Row 1: Complete -->
+<tr class="hover:bg-surface/50 transition-colors">
+<td class="px-6 py-4">
+<span class="flex items-center gap-2 text-sm font-medium">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="database">database</span>
+                                    Database
+                                </span>
+</td>
+<td class="px-6 py-4">
+<span class="text-sm font-bold text-on-surface">prod_inventory_v4</span>
+<p class="text-[10px] text-on-surface-variant">cluster-a-west</p>
+</td>
+<td class="px-6 py-4 text-sm font-medium text-on-surface-variant font-mono">node-0922-lx</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-secondary-container flex items-center justify-center text-[10px] font-bold text-on-secondary-container">SY</div>
+<span class="text-sm">System Cron</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">10:45 AM <span class="text-[10px] block opacity-60">Mar 24, 2024</span></td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-container text-on-tertiary-container text-[11px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span>
+                                    Complete
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary text-xs font-bold hover:underline">View Details</button>
+</td>
+</tr>
+<!-- Row 2: Failed -->
+<tr class="hover:bg-surface/50 transition-colors">
+<td class="px-6 py-4">
+<span class="flex items-center gap-2 text-sm font-medium">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="groups">groups</span>
+                                    Tenant
+                                </span>
+</td>
+<td class="px-6 py-4">
+<span class="text-sm font-bold text-on-surface">AcmeCorp_Enterprise</span>
+<p class="text-[10px] text-on-surface-variant">multi-tenant-cluster-2</p>
+</td>
+<td class="px-6 py-4 text-sm font-medium text-on-surface-variant font-mono">node-0114-lx</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<img alt="User" class="w-6 h-6 rounded-full object-cover" data-alt="headshot of a technician with glasses in a professional tech environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDuc7wAK0NfUkzU2AT_QfL7TKgeC6qoxHHqVg12b9LeAmSeoO9ENJp1PXnsbN0Bx9TnyVxIqw1CW4IH-IRGiuptByLuwPA9wV5Ku1SsvCBV9XuGwE69Ur-sTzml9svRif4Np-gQsCoSkR0NWAbKZ-kW5TSkpbNTxdklZMMSIfRCW6Hbh_uouC7U-WTdvoeAy0ek54CFOEbc-r5C9ge48EHmjQcD2kHtOwbA2TKiKmSV_lrkbjWyGhcQ6oi-pVEJZ5Rz2CCPE0PXtgnM"/>
+<span class="text-sm">J. Miller</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">09:12 AM <span class="text-[10px] block opacity-60">Mar 24, 2024</span></td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-error-container text-on-error-container text-[11px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-on-error-container"></span>
+                                    Failed
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-3">
+<button class="text-on-surface-variant text-xs font-bold hover:text-on-surface">Details</button>
+<button class="text-primary text-xs font-extrabold flex items-center gap-1 group">
+<span class="material-symbols-outlined text-[14px]" data-icon="refresh">refresh</span>
+                                        Retry
+                                    </button>
+</div>
+</td>
+</tr>
+<!-- Row 3: Running -->
+<tr class="hover:bg-surface/50 transition-colors">
+<td class="px-6 py-4">
+<span class="flex items-center gap-2 text-sm font-medium">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="dns">dns</span>
+                                    Node
+                                </span>
+</td>
+<td class="px-6 py-4">
+<span class="text-sm font-bold text-on-surface">Full-System-Snapshot</span>
+<p class="text-[10px] text-on-surface-variant">Region: US-East-1</p>
+</td>
+<td class="px-6 py-4 text-sm font-medium text-on-surface-variant font-mono">node-core-88</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-secondary-container flex items-center justify-center text-[10px] font-bold text-on-secondary-container">SY</div>
+<span class="text-sm">System Cron</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">11:55 AM <span class="text-[10px] block opacity-60">Mar 24, 2024</span></td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-container text-on-primary-container text-[11px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-on-primary-container animate-pulse"></span>
+                                    Running (62%)
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-on-surface-variant text-xs font-bold hover:text-on-surface">Monitor</button>
+</td>
+</tr>
+<!-- Row 4: Queued -->
+<tr class="hover:bg-surface/50 transition-colors">
+<td class="px-6 py-4">
+<span class="flex items-center gap-2 text-sm font-medium">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="database">database</span>
+                                    Database
+                                </span>
+</td>
+<td class="px-6 py-4">
+<span class="text-sm font-bold text-on-surface">archive_logs_2023</span>
+<p class="text-[10px] text-on-surface-variant">storage-tier-cold</p>
+</td>
+<td class="px-6 py-4 text-sm font-medium text-on-surface-variant font-mono">node-0441-lx</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-secondary-container flex items-center justify-center text-[10px] font-bold text-on-secondary-container">SY</div>
+<span class="text-sm">System Cron</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">12:00 PM <span class="text-[10px] block opacity-60">Mar 24, 2024</span></td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-highest text-on-surface-variant text-[11px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-on-surface-variant/40"></span>
+                                    Queued
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-error text-xs font-bold hover:underline">Cancel</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination / Footer -->
+<div class="px-6 py-4 flex items-center justify-between bg-surface-container-low/20">
+<span class="text-xs text-on-surface-variant">Showing <span class="font-bold text-on-surface">1 - 4</span> of 244 backup jobs</span>
+<div class="flex gap-2">
+<button class="p-1.5 rounded bg-surface border border-outline-variant/20 text-on-surface-variant hover:text-primary transition-colors disabled:opacity-30" disabled="">
+<span class="material-symbols-outlined text-lg" data-icon="chevron_left">chevron_left</span>
+</button>
+<button class="p-1.5 rounded bg-surface border border-outline-variant/20 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-lg" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Asymmetric Insight Section -->
+<section class="mt-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
+<div class="lg:col-span-2 bg-surface-container-lowest p-8 rounded-xl relative overflow-hidden">
+<div class="relative z-10">
+<h3 class="text-xl font-extrabold text-on-surface mb-2">Storage Optimization Insight</h3>
+<p class="text-on-surface-variant text-sm max-w-lg mb-6">Current incremental backups are saving 4.2TB monthly compared to full snapshots. Data deduplication ratio is holding steady at 12:1.</p>
+<div class="flex gap-8">
+<div>
+<div class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Total Vault Usage</div>
+<div class="text-2xl font-bold">84.2 TB</div>
+</div>
+<div>
+<div class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Estimated Cost/GB</div>
+<div class="text-2xl font-bold text-tertiary">$0.008</div>
+</div>
+</div>
+</div>
+<!-- Abstract Design Element -->
+<div class="absolute -right-16 -bottom-16 w-64 h-64 bg-primary/5 rounded-full blur-3xl"></div>
+<div class="absolute right-12 top-12">
+<span class="material-symbols-outlined text-6xl text-primary/10" data-icon="query_stats">query_stats</span>
+</div>
+</div>
+<div class="bg-inverse-surface text-on-primary p-8 rounded-xl flex flex-col justify-between">
+<div>
+<h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary-fixed" data-icon="verified_user" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+                        Security Protocol
+                    </h3>
+<p class="text-inverse-on-surface text-xs leading-relaxed">All backups are currently encrypted with AES-256-GCM. Off-site replication to secondary region (E-1) is operational with a 4ms lag.</p>
+</div>
+<button class="mt-8 text-xs font-bold uppercase tracking-widest py-3 border border-inverse-on-surface/30 rounded-lg hover:bg-on-primary hover:text-inverse-surface transition-all">
+                    Verify Integrity
+                </button>
+</div>
+</section>
+</main>
+</body></html>

@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Nodes | DB-Shield Infrastructure</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "on-secondary": "#f8f8ff",
+                "tertiary": "#006d4a",
+                "on-primary-fixed": "#003798",
+                "on-tertiary-fixed-variant": "#006544",
+                "on-tertiary-fixed": "#00452d",
+                "secondary-container": "#d5e3fc",
+                "tertiary-fixed-dim": "#58e7ab",
+                "on-primary-container": "#0048bf",
+                "primary-dim": "#0048c1",
+                "surface-bright": "#faf8ff",
+                "surface-container-highest": "#d9e2ff",
+                "error-container": "#fe8983",
+                "on-surface": "#113069",
+                "primary-fixed": "#dbe1ff",
+                "on-secondary-fixed-variant": "#4e5c71",
+                "inverse-on-surface": "#959cb5",
+                "outline": "#6079b7",
+                "on-primary-fixed-variant": "#0050d4",
+                "surface": "#faf8ff",
+                "error-dim": "#4e0309",
+                "on-error-container": "#752121",
+                "secondary-fixed-dim": "#c7d5ed",
+                "outline-variant": "#98b1f2",
+                "surface-dim": "#cdd9ff",
+                "surface-container-lowest": "#ffffff",
+                "on-surface-variant": "#445d99",
+                "secondary-dim": "#465468",
+                "surface-container": "#eaedff",
+                "on-secondary-fixed": "#324053",
+                "on-error": "#fff7f6",
+                "primary": "#0053db",
+                "on-tertiary": "#e6ffee",
+                "on-secondary-container": "#455367",
+                "inverse-surface": "#060e20",
+                "on-background": "#113069",
+                "secondary": "#526074",
+                "tertiary-dim": "#005f40",
+                "tertiary-container": "#69f6b8",
+                "inverse-primary": "#618bff",
+                "primary-fixed-dim": "#c7d3ff",
+                "tertiary-fixed": "#69f6b8",
+                "primary-container": "#dbe1ff",
+                "secondary-fixed": "#d5e3fc",
+                "on-primary": "#f8f7ff",
+                "background": "#faf8ff",
+                "surface-variant": "#d9e2ff",
+                "on-tertiary-container": "#005a3c",
+                "surface-container-low": "#f2f3ff",
+                "surface-container-high": "#e2e7ff",
+                "error": "#9f403d",
+                "surface-tint": "#0053db"
+              },
+              fontFamily: {
+                "headline": ["Manrope"],
+                "body": ["Inter"],
+                "label": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+            },
+          },
+        }
+      </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- SideNavBar (Shared Component) -->
+<aside class="fixed left-0 top-0 h-full flex flex-col p-4 bg-slate-50 dark:bg-slate-900 h-screen w-64 border-r-0 z-50">
+<div class="flex items-center gap-3 px-2 mb-8">
+<div class="w-8 h-8 bg-primary rounded flex items-center justify-center text-white shadow-sm">
+<span class="material-symbols-outlined text-sm" data-icon="shield">shield</span>
+</div>
+<div>
+<div class="text-xl font-bold text-slate-900 dark:text-slate-50 font-manrope tracking-tight">DB-Shield</div>
+<div class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Infrastructure</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<!-- Navigation Items Mapping -->
+<a class="flex items-center gap-3 px-3 py-2 transition-colors font-manrope text-sm font-medium tracking-tight text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="dashboard">dashboard</span>
+<span>Overview</span>
+</a>
+<!-- Active State Logic: Nodes List Page -->
+<a class="flex items-center gap-3 px-3 py-2 transition-all duration-200 font-manrope text-sm font-medium tracking-tight bg-white dark:bg-slate-950 text-blue-700 dark:text-blue-400 shadow-sm rounded-md" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="dns">dns</span>
+<span>Nodes</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 transition-colors font-manrope text-sm font-medium tracking-tight text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="group">group</span>
+<span>Tenants</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 transition-colors font-manrope text-sm font-medium tracking-tight text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="backup">backup</span>
+<span>Backups</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 transition-colors font-manrope text-sm font-medium tracking-tight text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="receipt_long">receipt_long</span>
+<span>Plans</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 transition-colors font-manrope text-sm font-medium tracking-tight text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="history">history</span>
+<span>Activity</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 transition-colors font-manrope text-sm font-medium tracking-tight text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="database">database</span>
+<span>Databases</span>
+</a>
+</nav>
+<div class="mt-auto pt-4 border-t border-slate-200/50 dark:border-slate-800/50 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 transition-colors font-manrope text-sm font-medium tracking-tight text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="person">person</span>
+<span>Account</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 transition-colors font-manrope text-sm font-medium tracking-tight text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+</div>
+</aside>
+<!-- TopNavBar (Shared Component) -->
+<header class="fixed top-0 left-64 right-0 z-40 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
+<div class="flex justify-between items-center h-16 px-8">
+<div class="flex items-center flex-1 max-w-md">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg" data-icon="search">search</span>
+<input class="w-full bg-surface-container-low border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 transition-all font-body" placeholder="Search infrastructure..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-600">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<div class="h-8 w-[1px] bg-slate-200 mx-2"></div>
+<div class="flex items-center gap-3 pl-2">
+<div class="text-right hidden sm:block">
+<div class="text-xs font-bold text-on-surface">Admin User</div>
+<div class="text-[10px] text-on-surface-variant uppercase tracking-tighter">System Architect</div>
+</div>
+<img alt="User Profile" class="w-8 h-8 rounded-full bg-slate-200" data-alt="close up of a professional male architect in a minimal workspace with soft lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAo2n8nmCARgroXRJiETBRSWLkdxZKRV2O-5nmpNsGuLMrx94lhYbxrPJ5w3FMdoOdkPVwrJztvFLHkjYZBC4B4G0mm5UQa9Y4TJk55ExF7DwSmDQzhwkj8vW_aDnkOSWEXQFukxcsuEURAP97AuPN9T6Tu-6ckuzRR7XUIosvlfgD7GN-vZZ_gjxPAGKBmBNDdDryZdpR9IMjmhJe1NkixSBaUOu5kca1ETE4jwvJCf8zh8FwquC1xC_vl_o-XrZw6Wqp5NmzjW-WU"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 mt-16 p-8 min-h-screen">
+<!-- Page Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+<div class="space-y-1">
+<h1 class="text-3xl font-extrabold text-on-surface tracking-tight font-headline">Nodes</h1>
+<p class="text-on-surface-variant font-body">Manage your database infrastructure nodes.</p>
+</div>
+<button class="inline-flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-lg font-semibold shadow-sm hover:bg-primary-dim transition-all focus:ring-2 focus:ring-primary focus:ring-offset-2">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span>
+<span>Add Node</span>
+</button>
+</div>
+<!-- Filter Bar & Stats -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+<div class="bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/15 flex flex-col gap-1">
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Total Nodes</span>
+<span class="text-3xl font-extrabold text-on-surface font-headline">42</span>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/15 flex flex-col gap-1">
+<span class="text-[10px] font-bold text-tertiary uppercase tracking-widest">Healthy</span>
+<span class="text-3xl font-extrabold text-tertiary font-headline">38</span>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/15 flex flex-col gap-1">
+<span class="text-[10px] font-bold text-on-error-container uppercase tracking-widest">Warning</span>
+<span class="text-3xl font-extrabold text-on-error font-headline">3</span>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/15 flex flex-col gap-1">
+<span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Offline</span>
+<span class="text-3xl font-extrabold text-slate-500 font-headline">1</span>
+</div>
+</div>
+<!-- Sticky Table Actions -->
+<div class="sticky top-16 z-30 bg-surface py-4 -mx-2 px-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div class="flex gap-1 p-1 bg-surface-container rounded-lg self-start">
+<button class="px-4 py-1.5 text-sm font-semibold bg-white text-primary rounded-md shadow-sm">All</button>
+<button class="px-4 py-1.5 text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors">Healthy</button>
+<button class="px-4 py-1.5 text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors">Warning</button>
+<button class="px-4 py-1.5 text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors">Offline</button>
+</div>
+<div class="flex items-center gap-3">
+<div class="text-xs text-on-surface-variant">Last updated: <span class="font-bold">14:02:45</span></div>
+<button class="w-9 h-9 flex items-center justify-center rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-white transition-colors">
+<span class="material-symbols-outlined text-lg" data-icon="refresh">refresh</span>
+</button>
+</div>
+</div>
+<!-- Main Data Table -->
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/15">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low/50">
+<th class="px-6 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-wider">Node Name</th>
+<th class="px-6 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-wider">DB Host / IP</th>
+<th class="px-6 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-wider">Public Endpoint</th>
+<th class="px-6 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-wider text-center">DBs</th>
+<th class="px-6 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-wider">Last Seen</th>
+<th class="px-6 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-wider">Status</th>
+<th class="px-6 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-wider text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-low">
+<!-- Sample Row 1 -->
+<tr class="group hover:bg-surface-container-low transition-colors cursor-pointer">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_rgba(0,109,74,0.4)]"></div>
+<span class="font-bold text-on-surface text-sm">Primary-Node-01</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm font-mono text-on-surface-variant">10.0.0.1</td>
+<td class="px-6 py-4 text-sm text-primary font-medium underline underline-offset-4 decoration-primary/20">shield.node.io</td>
+<td class="px-6 py-4 text-sm text-on-surface text-center font-bold">24</td>
+<td class="px-6 py-4 text-xs text-on-surface-variant">2 mins ago</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-tertiary-container text-on-tertiary-container">
+                                    Healthy
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="w-8 h-8 rounded-full hover:bg-surface-container-highest flex items-center justify-center transition-all text-on-surface-variant">
+<span class="material-symbols-outlined text-lg" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Sample Row 2 -->
+<tr class="group hover:bg-surface-container-low transition-colors cursor-pointer">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_rgba(0,109,74,0.4)]"></div>
+<span class="font-bold text-on-surface text-sm">Cluster-West-Alpha</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm font-mono text-on-surface-variant">192.168.1.12</td>
+<td class="px-6 py-4 text-sm text-primary font-medium underline underline-offset-4 decoration-primary/20">west.node.io</td>
+<td class="px-6 py-4 text-sm text-on-surface text-center font-bold">12</td>
+<td class="px-6 py-4 text-xs text-on-surface-variant">Just now</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-tertiary-container text-on-tertiary-container">
+                                    Healthy
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="w-8 h-8 rounded-full hover:bg-surface-container-highest flex items-center justify-center transition-all text-on-surface-variant">
+<span class="material-symbols-outlined text-lg" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Sample Row 3 -->
+<tr class="group hover:bg-surface-container-low transition-colors cursor-pointer">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-error shadow-[0_0_8px_rgba(159,64,61,0.4)]"></div>
+<span class="font-bold text-on-surface text-sm">Backup-Storage-04</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm font-mono text-on-surface-variant">10.0.1.45</td>
+<td class="px-6 py-4 text-sm text-primary font-medium underline underline-offset-4 decoration-primary/20">storage.node.io</td>
+<td class="px-6 py-4 text-sm text-on-surface text-center font-bold">0</td>
+<td class="px-6 py-4 text-xs text-on-surface-variant">14 mins ago</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-error-container text-on-error-container">
+                                    Warning
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="w-8 h-8 rounded-full hover:bg-surface-container-highest flex items-center justify-center transition-all text-on-surface-variant">
+<span class="material-symbols-outlined text-lg" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Sample Row 4 -->
+<tr class="group hover:bg-surface-container-low transition-colors cursor-pointer">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_rgba(0,109,74,0.4)]"></div>
+<span class="font-bold text-on-surface text-sm">Redis-Cache-01</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm font-mono text-on-surface-variant">10.0.0.98</td>
+<td class="px-6 py-4 text-sm text-primary font-medium underline underline-offset-4 decoration-primary/20">cache.node.io</td>
+<td class="px-6 py-4 text-sm text-on-surface text-center font-bold">4</td>
+<td class="px-6 py-4 text-xs text-on-surface-variant">1 min ago</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-tertiary-container text-on-tertiary-container">
+                                    Healthy
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="w-8 h-8 rounded-full hover:bg-surface-container-highest flex items-center justify-center transition-all text-on-surface-variant">
+<span class="material-symbols-outlined text-lg" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Sample Row 5 -->
+<tr class="group hover:bg-surface-container-low transition-colors cursor-pointer">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-slate-400"></div>
+<span class="font-bold text-on-surface text-sm">Legacy-MySQL-5.7</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm font-mono text-on-surface-variant">172.16.0.4</td>
+<td class="px-6 py-4 text-sm text-primary font-medium underline underline-offset-4 decoration-primary/20">legacy.node.io</td>
+<td class="px-6 py-4 text-sm text-on-surface text-center font-bold">8</td>
+<td class="px-6 py-4 text-xs text-on-surface-variant">2 days ago</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-secondary-container text-on-secondary-container">
+                                    Offline
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="w-8 h-8 rounded-full hover:bg-surface-container-highest flex items-center justify-center transition-all text-on-surface-variant">
+<span class="material-symbols-outlined text-lg" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Footer/Pagination -->
+<div class="px-6 py-4 bg-surface-container-low/30 border-t border-surface-container-low flex items-center justify-between">
+<div class="text-xs font-medium text-on-surface-variant">Showing 1 to 5 of 42 nodes</div>
+<div class="flex items-center gap-2">
+<button class="px-3 py-1.5 text-xs font-bold text-on-surface-variant hover:text-on-surface disabled:opacity-30" disabled="">Previous</button>
+<div class="flex gap-1">
+<button class="w-8 h-8 rounded bg-primary text-white text-xs font-bold">1</button>
+<button class="w-8 h-8 rounded hover:bg-surface-container-highest text-xs font-bold text-on-surface transition-colors">2</button>
+<button class="w-8 h-8 rounded hover:bg-surface-container-highest text-xs font-bold text-on-surface transition-colors">3</button>
+</div>
+<button class="px-3 py-1.5 text-xs font-bold text-on-surface-variant hover:text-on-surface">Next</button>
+</div>
+</div>
+</div>
+<!-- System Architecture Visualization (Subtle Context) -->
+<div class="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
+<div class="lg:col-span-2 bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/15">
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-extrabold text-on-surface tracking-tight font-headline">Node Performance Overview</h3>
+<div class="flex items-center gap-2 text-xs font-bold text-tertiary">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span>
+                        System Stability: 99.98%
+                    </div>
+</div>
+<div class="h-48 w-full bg-surface-container-low rounded-lg flex items-end justify-between p-4 gap-2">
+<!-- Faux Bar Chart -->
+<div class="w-full bg-primary/10 rounded-t h-[60%] hover:bg-primary/20 transition-all"></div>
+<div class="w-full bg-primary/10 rounded-t h-[75%] hover:bg-primary/20 transition-all"></div>
+<div class="w-full bg-primary/10 rounded-t h-[90%] hover:bg-primary/20 transition-all"></div>
+<div class="w-full bg-primary/10 rounded-t h-[65%] hover:bg-primary/20 transition-all"></div>
+<div class="w-full bg-primary/10 rounded-t h-[80%] hover:bg-primary/20 transition-all"></div>
+<div class="w-full bg-primary/10 rounded-t h-[70%] hover:bg-primary/20 transition-all"></div>
+<div class="w-full bg-primary/20 rounded-t h-[95%] shadow-[0_-4px_12px_rgba(0,83,219,0.15)]"></div>
+<div class="w-full bg-primary/10 rounded-t h-[85%] hover:bg-primary/20 transition-all"></div>
+<div class="w-full bg-primary/10 rounded-t h-[75%] hover:bg-primary/20 transition-all"></div>
+<div class="w-full bg-primary/10 rounded-t h-[60%] hover:bg-primary/20 transition-all"></div>
+<div class="w-full bg-primary/10 rounded-t h-[80%] hover:bg-primary/20 transition-all"></div>
+<div class="w-full bg-primary/10 rounded-t h-[90%] hover:bg-primary/20 transition-all"></div>
+</div>
+<div class="flex justify-between mt-3 px-2">
+<span class="text-[10px] text-on-surface-variant font-bold uppercase">00:00</span>
+<span class="text-[10px] text-on-surface-variant font-bold uppercase">Now</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/15 flex flex-col justify-between">
+<div>
+<h3 class="font-extrabold text-on-surface tracking-tight font-headline mb-4 text-sm">Infrastructure Map</h3>
+<div class="aspect-square bg-surface-container rounded-lg overflow-hidden relative grayscale opacity-70">
+<img alt="Minimalist topographic map showing data center locations" class="w-full h-full object-cover" data-location="London" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAFUCxEr0HvxUK6oVKT-jyanS5PdRUnKdFAiIRXstPe55_73IvzXljBae7AWGToMWosP_yqhUpRKczdxQ3ey-1MEE3tTYrFDFxQ1MGUl-uYopCvwO8zIzH1dOWbR7SgfqFSvQjSlHoPnEM-ir-YLIoZrRyrY6U6b65-5283bzRjzOPPQLdW-afOOKiWhFZSsNTeZ1cZA_imuuBbI5WrQIoQA7G8mlTBMLWzR1iD-A19Z-G6nagPUqx52QqxMAq3QYws81YKIAVtss8Z"/>
+<div class="absolute top-1/4 left-1/3 w-3 h-3 bg-primary rounded-full animate-pulse border-2 border-white"></div>
+<div class="absolute bottom-1/3 right-1/4 w-3 h-3 bg-primary rounded-full animate-pulse border-2 border-white"></div>
+<div class="absolute top-1/2 left-1/2 w-3 h-3 bg-tertiary rounded-full border-2 border-white"></div>
+</div>
+</div>
+<div class="pt-4 mt-4 border-t border-surface-container flex items-center justify-between">
+<div class="text-[11px] font-bold text-on-surface-variant">Active Regions</div>
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[8px] font-bold">EU</div>
+<div class="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[8px] font-bold">US</div>
+<div class="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[8px] font-bold">AS</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

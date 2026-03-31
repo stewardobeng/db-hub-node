@@ -228,3 +228,22 @@ The actual runtime PHP for both sides is generated from heredocs inside:
 - `install-db-node.sh`
 
 If you change platform behavior, update the installer heredocs first, then redeploy or rerun the installer on the target server.
+
+## 14. Uninstalling The Platform
+
+Supported uninstall targets:
+
+- `sudo ./uninstall-db-platform.sh hub`
+- `sudo ./uninstall-db-platform.sh node`
+- `sudo ./uninstall-db-platform.sh all`
+
+Optional flags and environment variables:
+
+- `PURGE_PACKAGES=yes`: also purge related OS packages
+- `--remove-repo` or `REMOVE_REPO=yes`: also remove the installer checkout directory after uninstall
+
+Important behavior:
+
+- By default, the uninstaller removes the deployed Hub and Node runtime only.
+- The installer checkout removal is conservative and only runs when the script can confirm the directory still looks like the DB-Shield repo.
+- Removing the repo checkout is useful on a server where you cloned the project only for install and no longer need the source tree afterward.

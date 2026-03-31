@@ -16,6 +16,24 @@ The Hub manages tenants and Nodes. Each Node runs the actual MariaDB workloads.
 - phpMyAdmin is exposed per Node, and system schemas are hidden from the phpMyAdmin navigation tree.
 - Automatic encrypted daily Node backups with optional `rclone` sync.
 - Scope-aware uninstall for `hub`, `node`, or `all`.
+- Optional installer checkout removal during uninstall with `--remove-repo` or `REMOVE_REPO=yes`.
+
+## UI Source Of Truth
+
+The current Hub UI is no longer maintained only as a large inline heredoc.
+
+- `templates/hub-index.php`: primary Hub runtime template copied into `/var/www/db-hub/index.php` during install.
+- `templates/hub-view.php`: supporting Hub view template copied into `/var/www/db-hub/hub-view.php` during install.
+- `stitch/`: designer-delivered HTML screens, screenshots, and design references for every major page and feature.
+- `uidesign.md`: the product-facing screen and information architecture brief.
+
+Current Hub install behavior:
+
+1. `install-db-hub.sh` still contains a fallback PHP heredoc for the Hub runtime.
+2. If `templates/hub-index.php` and `templates/hub-view.php` exist beside the installer, the installer copies those files into the deployed Hub and uses them as the shipped UI.
+3. After copy, the installer injects environment-specific values such as the admin credentials.
+
+If you want to change the live Hub UI, update the files in `templates/` first. Treat `stitch/` as the visual design reference, not the deployed runtime itself.
 
 ## Architecture
 
@@ -176,11 +194,33 @@ sudo PURGE_PACKAGES=yes ./uninstall-db-platform.sh node
 sudo PURGE_PACKAGES=yes ./uninstall-db-platform.sh all
 ```
 
+Optional installer checkout removal:
+
+```bash
+sudo ./uninstall-db-platform.sh all --remove-repo
+sudo REMOVE_REPO=yes ./uninstall-db-platform.sh hub
+```
+
 Behavior:
 
 - `hub`: removes the Hub app, SQLite data, Hub cron job, Apache config, and Hub leftovers.
 - `node`: removes the Node agent, MariaDB data/config, backup jobs, phpMyAdmin config, and Node leftovers.
 - `all`: removes both sides and can purge shared packages for a full wipe.
+- `--remove-repo`: also removes the installer checkout directory when the script can safely confirm it is running from that repo.
+
+Recommended uninstall examples:
+
+```bash
+sudo ./uninstall-db-platform.sh hub
+sudo PURGE_PACKAGES=yes ./uninstall-db-platform.sh node
+sudo ./uninstall-db-platform.sh all --remove-repo
+```
+
+Notes:
+
+- Default uninstall removes the deployed runtime only.
+- Repo removal is intentionally conservative and only happens when the script still recognizes its own checkout safely.
+- Use `--remove-repo` when the cloned project directory on the server is no longer needed after uninstall.
 
 ## Repository Layout
 
@@ -188,3 +228,6 @@ Behavior:
 - [install-db-node.sh](./install-db-node.sh)
 - [uninstall-db-platform.sh](./uninstall-db-platform.sh)
 - [DOCUMENTATION.md](./DOCUMENTATION.md)
+- [uidesign.md](./uidesign.md)
+- [`templates/`](./templates)
+- [`stitch/`](./stitch)

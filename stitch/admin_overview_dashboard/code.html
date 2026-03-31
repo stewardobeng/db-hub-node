@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>DB-Shield Admin Overview</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<!-- Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-secondary": "#f8f8ff",
+              "tertiary": "#006d4a",
+              "on-primary-fixed": "#003798",
+              "on-tertiary-fixed-variant": "#006544",
+              "on-tertiary-fixed": "#00452d",
+              "secondary-container": "#d5e3fc",
+              "tertiary-fixed-dim": "#58e7ab",
+              "on-primary-container": "#0048bf",
+              "primary-dim": "#0048c1",
+              "surface-bright": "#faf8ff",
+              "surface-container-highest": "#d9e2ff",
+              "error-container": "#fe8983",
+              "on-surface": "#113069",
+              "primary-fixed": "#dbe1ff",
+              "on-secondary-fixed-variant": "#4e5c71",
+              "inverse-on-surface": "#959cb5",
+              "outline": "#6079b7",
+              "on-primary-fixed-variant": "#0050d4",
+              "surface": "#faf8ff",
+              "error-dim": "#4e0309",
+              "on-error-container": "#752121",
+              "secondary-fixed-dim": "#c7d5ed",
+              "outline-variant": "#98b1f2",
+              "surface-dim": "#cdd9ff",
+              "surface-container-lowest": "#ffffff",
+              "on-surface-variant": "#445d99",
+              "secondary-dim": "#465468",
+              "surface-container": "#eaedff",
+              "on-secondary-fixed": "#324053",
+              "on-error": "#fff7f6",
+              "primary": "#0053db",
+              "on-tertiary": "#e6ffee",
+              "on-secondary-container": "#455367",
+              "inverse-surface": "#060e20",
+              "on-background": "#113069",
+              "secondary": "#526074",
+              "tertiary-dim": "#005f40",
+              "tertiary-container": "#69f6b8",
+              "inverse-primary": "#618bff",
+              "primary-fixed-dim": "#c7d3ff",
+              "tertiary-fixed": "#69f6b8",
+              "primary-container": "#dbe1ff",
+              "secondary-fixed": "#d5e3fc",
+              "on-primary": "#f8f7ff",
+              "background": "#faf8ff",
+              "surface-variant": "#d9e2ff",
+              "on-tertiary-container": "#005a3c",
+              "surface-container-low": "#f2f3ff",
+              "surface-container-high": "#e2e7ff",
+              "error": "#9f403d",
+              "surface-tint": "#0053db"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-manrope { font-family: 'Manrope', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface antialiased">
+<!-- SideNavBar (from JSON) -->
+<aside class="fixed left-0 top-0 h-full flex flex-col p-4 bg-slate-50 h-screen w-64 border-r-0 z-50">
+<div class="flex items-center gap-3 px-2 mb-10">
+<div class="w-8 h-8 bg-primary rounded flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-sm" data-icon="shield">shield</span>
+</div>
+<div>
+<h1 class="text-xl font-bold text-slate-900 leading-tight">DB-Shield</h1>
+<p class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Infrastructure</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<!-- Overview (Active) -->
+<a class="flex items-center gap-3 px-3 py-2.5 bg-white text-blue-700 shadow-sm rounded-md font-manrope text-sm font-medium tracking-tight Active: opacity-80 transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="dashboard">dashboard</span>
+<span>Overview</span>
+</a>
+<!-- Inactive Items -->
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="dns">dns</span>
+<span>Nodes</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="group">group</span>
+<span>Tenants</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="backup">backup</span>
+<span>Backups</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="receipt_long">receipt_long</span>
+<span>Plans</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="history">history</span>
+<span>Activity</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="database">database</span>
+<span>Databases</span>
+</a>
+</nav>
+<div class="mt-auto space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="person">person</span>
+<span>Account</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+</div>
+</aside>
+<!-- TopNavBar (from JSON) -->
+<header class="fixed top-0 right-0 left-0 ml-64 h-16 bg-white/80 backdrop-blur-md flex justify-between items-center px-8 border-b border-slate-100 z-40">
+<div class="flex items-center bg-surface-container-low px-3 py-1.5 rounded-lg w-96">
+<span class="material-symbols-outlined text-on-surface-variant text-sm mr-2" data-icon="search">search</span>
+<input class="bg-transparent border-none text-sm w-full focus:ring-0 placeholder-on-surface-variant/50" placeholder="Search infrastructure..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="relative p-2 text-slate-600 hover:text-blue-700 transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-full">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<div class="h-8 w-[1px] bg-slate-200 mx-2"></div>
+<div class="flex items-center gap-3 cursor-pointer group">
+<div class="text-right">
+<p class="text-sm font-bold text-on-surface">Admin User</p>
+<p class="text-[10px] text-on-surface-variant">Profile</p>
+</div>
+<img alt="User Profile" class="w-8 h-8 rounded-full border-2 border-primary/10 group-hover:border-primary/50 transition-all" data-alt="close up professional headshot of a person with friendly expression in high quality studio lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC3u2S_5Dj7VNCpK1DO6la_thxXZfXG1BvSoL_Y9cX5KPvnajp6O2nXUYpsBmGymom-7QWc87D7K0AMLW-tt8JmkX4GBhgnAoH5-_QtQohbxWMqXLkGEuQ3yLfo5-M20ChQGceFuZSSlkCVAGwsAT9r4MIdb3-jjWZzfmYQgR-axXyqwD9tuUPxm81cVva8vehT5p7LZj921oPcumVi304YRIE2DMEVHxrBT4dcXi-ZBmoqW_D49feOcKTcRu9HrrjQApr-Gek4hLhF"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-24 p-8 min-h-screen">
+<!-- Page Header -->
+<div class="flex justify-between items-end mb-10">
+<div>
+<h2 class="text-3xl font-extrabold font-headline tracking-tight text-on-surface">Admin Dashboard</h2>
+<div class="flex items-center gap-2 mt-2">
+<span class="flex h-2 w-2 rounded-full bg-tertiary"></span>
+<span class="text-sm font-medium text-tertiary">System Healthy</span>
+<span class="text-xs text-on-surface-variant ml-2">• All 8 nodes responding</span>
+</div>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container-highest text-primary font-bold text-sm rounded transition-colors hover:bg-primary/10">
+<span class="material-symbols-outlined text-sm" data-icon="refresh">refresh</span>
+                    Refresh Data
+                </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-primary text-white font-bold text-sm rounded shadow-sm hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+                    New Deployment
+                </button>
+</div>
+</div>
+<!-- KPI Row -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-10">
+<!-- KPI 1 -->
+<div class="bg-surface-container-lowest p-6 rounded-xl border-none">
+<p class="text-[10px] uppercase tracking-wider font-bold text-on-surface-variant mb-4">Active Nodes</p>
+<div class="flex items-baseline gap-2">
+<span class="text-4xl font-headline font-extrabold text-on-surface">8</span>
+<span class="text-xs font-bold text-tertiary">100%</span>
+</div>
+</div>
+<!-- KPI 2 -->
+<div class="bg-surface-container-lowest p-6 rounded-xl border-none">
+<p class="text-[10px] uppercase tracking-wider font-bold text-on-surface-variant mb-4">Registered Tenants</p>
+<div class="flex items-baseline gap-2">
+<span class="text-4xl font-headline font-extrabold text-on-surface">42</span>
+<span class="text-xs font-bold text-primary">+3 this week</span>
+</div>
+</div>
+<!-- KPI 3 -->
+<div class="bg-surface-container-lowest p-6 rounded-xl border-none">
+<p class="text-[10px] uppercase tracking-wider font-bold text-on-surface-variant mb-4">Provisioned DBs</p>
+<div class="flex items-baseline gap-2">
+<span class="text-4xl font-headline font-extrabold text-on-surface">156</span>
+<span class="text-xs font-bold text-on-surface-variant">Across clusters</span>
+</div>
+</div>
+<!-- KPI 4 -->
+<div class="bg-surface-container-lowest p-6 rounded-xl border-none">
+<p class="text-[10px] uppercase tracking-wider font-bold text-on-surface-variant mb-4">Storage Usage</p>
+<div class="flex flex-col gap-2">
+<span class="text-4xl font-headline font-extrabold text-on-surface">64%</span>
+<div class="w-full bg-surface-container-low h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[64%]"></div>
+</div>
+</div>
+</div>
+<!-- KPI 5 -->
+<div class="bg-surface-container-lowest p-6 rounded-xl border-none">
+<p class="text-[10px] uppercase tracking-wider font-bold text-on-surface-variant mb-4">Recent Backups</p>
+<div class="flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="text-sm font-medium text-on-surface">12 Success</span>
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="check_circle">check_circle</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-sm font-medium text-on-surface-variant">0 Failed</span>
+<span class="material-symbols-outlined text-outline text-sm" data-icon="cancel">cancel</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Main Layout Grid -->
+<div class="grid grid-cols-12 gap-8">
+<!-- Left Column: Health & Activity -->
+<div class="col-span-12 lg:col-span-8 space-y-8">
+<!-- Health Panel -->
+<section class="bg-surface-container-lowest rounded-xl p-8">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-lg font-bold font-headline text-on-surface">Node Infrastructure Status</h3>
+<a class="text-xs font-bold text-primary hover:underline" href="#">View All Clusters</a>
+</div>
+<div class="overflow-hidden">
+<table class="w-full text-left">
+<thead class="border-b border-surface-container-low">
+<tr class="text-on-surface-variant">
+<th class="pb-4 font-bold text-[10px] uppercase tracking-wider">Node Identifier</th>
+<th class="pb-4 font-bold text-[10px] uppercase tracking-wider">Region</th>
+<th class="pb-4 font-bold text-[10px] uppercase tracking-wider">Load</th>
+<th class="pb-4 font-bold text-[10px] uppercase tracking-wider">Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-low">
+<tr>
+<td class="py-4 font-medium text-on-surface">DB-NODE-01-USW</td>
+<td class="py-4 text-on-surface-variant text-sm">us-west-2</td>
+<td class="py-4">
+<div class="w-24 bg-surface-container-low h-1.5 rounded-full">
+<div class="bg-tertiary h-full w-[24%]"></div>
+</div>
+</td>
+<td class="py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-tertiary-container text-on-tertiary-container">Online</span>
+</td>
+</tr>
+<tr>
+<td class="py-4 font-medium text-on-surface">DB-NODE-02-USE</td>
+<td class="py-4 text-on-surface-variant text-sm">us-east-1</td>
+<td class="py-4">
+<div class="w-24 bg-surface-container-low h-1.5 rounded-full">
+<div class="bg-primary h-full w-[68%]"></div>
+</div>
+</td>
+<td class="py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-tertiary-container text-on-tertiary-container">Online</span>
+</td>
+</tr>
+<tr>
+<td class="py-4 font-medium text-on-surface">DB-NODE-03-EU</td>
+<td class="py-4 text-on-surface-variant text-sm">eu-central-1</td>
+<td class="py-4">
+<div class="w-24 bg-surface-container-low h-1.5 rounded-full">
+<div class="bg-error h-full w-[92%]"></div>
+</div>
+</td>
+<td class="py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-secondary-container text-on-secondary-container">Warning</span>
+</td>
+</tr>
+<tr>
+<td class="py-4 font-medium text-on-surface">DB-NODE-04-AP</td>
+<td class="py-4 text-on-surface-variant text-sm">ap-south-1</td>
+<td class="py-4">
+<div class="w-24 bg-surface-container-low h-1.5 rounded-full">
+<div class="bg-tertiary h-full w-[15%]"></div>
+</div>
+</td>
+<td class="py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-tertiary-container text-on-tertiary-container">Online</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- Activity Feed -->
+<section class="bg-surface-container-lowest rounded-xl p-8">
+<h3 class="text-lg font-bold font-headline text-on-surface mb-6">Infrastructure Activity</h3>
+<div class="space-y-6">
+<!-- Activity Item -->
+<div class="flex gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-low flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="cloud_done">cloud_done</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<p class="text-sm font-bold text-on-surface">System Backup Completed</p>
+<span class="text-[10px] font-medium text-on-surface-variant">12m ago</span>
+</div>
+<p class="text-sm text-on-surface-variant mt-1">Tenant <span class="text-primary font-medium">Acme Corp</span> data vault successfully synchronized to S3-West.</p>
+</div>
+</div>
+<!-- Activity Item -->
+<div class="flex gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-low flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-tertiary text-[20px]" data-icon="person_add">person_add</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<p class="text-sm font-bold text-on-surface">New Tenant Registered</p>
+<span class="text-[10px] font-medium text-on-surface-variant">45m ago</span>
+</div>
+<p class="text-sm text-on-surface-variant mt-1">Provisioned isolated infrastructure for <span class="text-primary font-medium">Stellar FinTech</span>.</p>
+</div>
+</div>
+<!-- Activity Item -->
+<div class="flex gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-low flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]" data-icon="add_circle">add_circle</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<p class="text-sm font-bold text-on-surface">Node DB-NODE-08 Initialized</p>
+<span class="text-[10px] font-medium text-on-surface-variant">2h ago</span>
+</div>
+<p class="text-sm text-on-surface-variant mt-1">Successfully joined cluster at <span class="font-mono">10.0.4.156</span>.</p>
+</div>
+</div>
+</div>
+<button class="w-full mt-8 py-3 text-sm font-bold text-primary border border-primary/10 rounded hover:bg-primary/5 transition-colors">
+                        View Full Audit Log
+                    </button>
+</section>
+</div>
+<!-- Right Column: Actions & Alerts -->
+<div class="col-span-12 lg:col-span-4 space-y-8">
+<!-- Quick Actions -->
+<section class="bg-on-surface text-white rounded-xl p-8 overflow-hidden relative">
+<div class="absolute -right-4 -top-4 w-32 h-32 bg-primary/20 blur-3xl rounded-full"></div>
+<h3 class="text-lg font-bold font-headline mb-6 relative z-10">Quick Actions</h3>
+<div class="grid grid-cols-1 gap-3 relative z-10">
+<button class="flex items-center justify-between p-4 bg-white/10 rounded-lg hover:bg-white/20 transition-all border border-white/5 group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="dns">dns</span>
+<span class="text-sm font-bold">Add Compute Node</span>
+</div>
+<span class="material-symbols-outlined text-sm opacity-0 group-hover:opacity-100 transition-opacity" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<button class="flex items-center justify-between p-4 bg-white/10 rounded-lg hover:bg-white/20 transition-all border border-white/5 group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="person_add">person_add</span>
+<span class="text-sm font-bold">Create New Tenant</span>
+</div>
+<span class="material-symbols-outlined text-sm opacity-0 group-hover:opacity-100 transition-opacity" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<button class="flex items-center justify-between p-4 bg-white/10 rounded-lg hover:bg-white/20 transition-all border border-white/5 group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="backup">backup</span>
+<span class="text-sm font-bold">Trigger Global Backup</span>
+</div>
+<span class="material-symbols-outlined text-sm opacity-0 group-hover:opacity-100 transition-opacity" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</section>
+<!-- Attention Needed -->
+<section class="bg-surface-container-lowest rounded-xl p-8">
+<div class="flex items-center gap-2 mb-6">
+<span class="material-symbols-outlined text-error" data-icon="warning">warning</span>
+<h3 class="text-lg font-bold font-headline text-on-surface">Attention Needed</h3>
+</div>
+<div class="space-y-4">
+<!-- Alert Item -->
+<div class="p-4 rounded-lg bg-error-container/20 border-l-4 border-error">
+<p class="text-xs font-bold text-on-error-container uppercase tracking-wider mb-1">Critical Performance</p>
+<p class="text-sm text-on-surface font-medium leading-relaxed">Node DB-NODE-03-EU is operating at 92% capacity. Provisioning of new databases to this cluster has been paused.</p>
+<button class="mt-3 text-xs font-extrabold text-error hover:underline uppercase">Auto-Scale Now</button>
+</div>
+<!-- Alert Item -->
+<div class="p-4 rounded-lg bg-secondary-container/20 border-l-4 border-secondary">
+<p class="text-xs font-bold text-on-secondary-container uppercase tracking-wider mb-1">Configuration Warning</p>
+<p class="text-sm text-on-surface font-medium leading-relaxed">Retention policy for 3 tenants will expire in 48 hours. Review backup archival settings.</p>
+<button class="mt-3 text-xs font-extrabold text-secondary hover:underline uppercase">Review Policies</button>
+</div>
+</div>
+</section>
+<!-- System Maintenance Card -->
+<section class="bg-surface-container-high rounded-xl p-8 relative overflow-hidden">
+<div class="relative z-10">
+<h4 class="text-sm font-bold text-on-surface mb-2">Scheduled Maintenance</h4>
+<p class="text-xs text-on-surface-variant mb-6">Infrastructure patch v2.4.1 scheduled for Sunday at 02:00 UTC.</p>
+<div class="flex items-center gap-3">
+<div class="flex -space-x-2">
+<img class="w-6 h-6 rounded-full border-2 border-white" data-alt="portrait of a software engineer in office setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDVyEw6vLiYNUX5RJHuhP-cYFASGG2odMRW45CaNbSyICuDFdYb1wkhBu_7MnlGq787x0K0m0k4YuxD80lJh4zcXwKdcSgvDnahXcA6Xo33EwJKEUaU1aJGFv0xny_uFwpD3mpZD7ZLrEkKKaBERxR4B8-88HVwXtis1Cnmp7KQZTFirz-3E3qrudO4yVYNX0bp8OvnVI7-Qu-KjkG96vCGfWKuRpt-ek9WtmOfd2_z2RVThkBn69VpLg51VXpBNBh2zcQySnFSN9ta"/>
+<img class="w-6 h-6 rounded-full border-2 border-white" data-alt="portrait of a systems architect in high tech environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC35hLiELYPYA-ZV5Rcs3SVENfRSfTFBdw0SqxcGSJ-pBLKhOQQxNxfpj1EBrz3jO-FLcYrrCNne97-8CBGOFzXwuAlTjN4UZQRjXWkDEbl2t-CZrDSCcfN2Pp7t_CQWV5T-6HUwxauPMnGrSFJQ8It_fiZ637n6xiGiyK1flalEpGIfdJbMLDm7ygNXRtwKCgK1DMq9t7iN4UR7dBIciDoOX2Oq9tdnK1Fd2amS8NQ1cOPdi3IWjKZFB1_9UxaZCoCKWnh6Xji6Lwd"/>
+</div>
+<span class="text-[10px] font-medium text-on-surface-variant">2 Engineers assigned</span>
+</div>
+</div>
+<span class="absolute -bottom-8 -right-8 material-symbols-outlined text-white/50 text-[120px] pointer-events-none" data-icon="engineering">engineering</span>
+</section>
+</div>
+</div>
+</main>
+</body></html>

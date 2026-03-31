@@ -25,6 +25,7 @@ msg_err()    { echo -e "${CLR_RED}[✘]${CLR_RESET} $*"; }
 if [[ ${EUID:-0} -ne 0 ]]; then msg_err "Run as root."; exit 1; fi
 
 export DEBIAN_FRONTEND=noninteractive
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HUB_ROOT="/var/www/db-hub"
 SUMMARY_FILE="/root/db-hub-install-summary.txt"
 
@@ -141,6 +142,8 @@ function hub_db(): PDO {
     $pdo->exec("CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE, password_hash TEXT, package_id INTEGER, expires_at DATETIME, status TEXT DEFAULT 'pending')");
     $pdo->exec("CREATE TABLE IF NOT EXISTS tenant_dbs (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER, server_id INTEGER, db_name TEXT, db_user TEXT, allowed_ips TEXT DEFAULT '[\"%\"]', last_size_mb REAL DEFAULT 0)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS security_log (ip TEXT UNIQUE, attempts INTEGER DEFAULT 0, last_attempt DATETIME)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS backup_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT, target_label TEXT, requested_by_role TEXT, requested_by_id INTEGER, server_id INTEGER, client_id INTEGER, tdb_id INTEGER, file_name TEXT, file_path TEXT, status TEXT DEFAULT 'queued', message TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_role TEXT, actor_id INTEGER, event_type TEXT, entity_type TEXT, entity_id INTEGER, message TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
     try { $pdo->exec("ALTER TABLE servers ADD COLUMN pma_alias TEXT DEFAULT 'phpmyadmin'"); } catch (Throwable $e) {}
     seed_default_packages($pdo);
     return $pdo;
@@ -178,6 +181,30 @@ function record_failed_login(PDO $db, string $ip): void {
 }
 function clear_failed_login(PDO $db, string $ip): void {
     $db->prepare("DELETE FROM security_log WHERE ip = ?")->execute([$ip]);
+}
+function local_return_to(string $fallback): string {
+    $returnTo = trim((string)($_POST['return_to'] ?? ''));
+    return preg_match('/^\?/', $returnTo) ? $returnTo : $fallback;
+}
+function record_activity(PDO $db, string $actorRole, ?int $actorId, string $eventType, string $entityType, ?int $entityId, string $message): void {
+    $db->prepare("INSERT INTO activity_log (actor_role, actor_id, event_type, entity_type, entity_id, message) VALUES (?,?,?,?,?,?)")
+        ->execute([$actorRole, $actorId, $eventType, $entityType, $entityId, $message]);
+}
+function record_backup_job(PDO $db, string $requestedByRole, ?int $requestedById, array $job): void {
+    $db->prepare("INSERT INTO backup_jobs (scope, target_label, requested_by_role, requested_by_id, server_id, client_id, tdb_id, file_name, file_path, status, message) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+        ->execute([
+            $job['scope'] ?? 'database',
+            $job['target_label'] ?? '',
+            $requestedByRole,
+            $requestedById,
+            $job['server_id'] ?? null,
+            $job['client_id'] ?? null,
+            $job['tdb_id'] ?? null,
+            $job['file_name'] ?? '',
+            $job['file_path'] ?? '',
+            $job['status'] ?? 'queued',
+            $job['message'] ?? '',
+        ]);
 }
 function call_agent(array $server, array $params = []): array {
     if (empty($server['public_url']) || empty($server['agent_key'])) return ['error' => 'Server configuration is incomplete.'];
@@ -395,10 +422,20 @@ function queue_backup_for_database(PDO $db, int $tdbId, ?int $clientId = null): 
     if (isset($backup['error'])) return ['error' => (string)$backup['error']];
     $message = 'Backup queued for ' . $row['db_name'] . ' on ' . $row['server_name'] . '.';
     if (!empty($backup['file'])) $message .= ' File: ' . $backup['file'];
-    return ['message' => $message];
+    return ['message' => $message, 'jobs' => [[
+        'scope' => 'database',
+        'target_label' => (string)$row['db_name'],
+        'server_id' => null,
+        'client_id' => (int)$row['client_id'],
+        'tdb_id' => $tdbId,
+        'file_name' => (string)($backup['file'] ?? ''),
+        'file_path' => (string)($backup['path'] ?? ''),
+        'status' => 'queued',
+        'message' => $message,
+    ]]];
 }
 function queue_backup_for_client(PDO $db, int $clientId): array {
-    $stmt = $db->prepare("SELECT t.db_name, s.name AS server_name, s.agent_key, s.public_url
+    $stmt = $db->prepare("SELECT t.id, t.db_name, t.client_id, t.server_id, s.name AS server_name, s.agent_key, s.public_url
                           FROM tenant_dbs t
                           JOIN servers s ON s.id = t.server_id
                           WHERE t.client_id = ?
@@ -409,6 +446,7 @@ function queue_backup_for_client(PDO $db, int $clientId): array {
     $count = 0;
     $latestFile = '';
     $firstError = '';
+    $jobs = [];
     foreach ($rows as $row) {
         $backup = queue_backup($row, [(string)$row['db_name']]);
         if (isset($backup['error'])) {
@@ -417,12 +455,23 @@ function queue_backup_for_client(PDO $db, int $clientId): array {
         }
         $count++;
         if (!empty($backup['file'])) $latestFile = (string)$backup['file'];
+        $jobs[] = [
+            'scope' => 'database',
+            'target_label' => (string)$row['db_name'],
+            'server_id' => (int)$row['server_id'],
+            'client_id' => (int)$row['client_id'],
+            'tdb_id' => (int)$row['id'],
+            'file_name' => (string)($backup['file'] ?? ''),
+            'file_path' => (string)($backup['path'] ?? ''),
+            'status' => 'queued',
+            'message' => 'Backup queued for ' . $row['db_name'] . ' on ' . $row['server_name'] . '.',
+        ];
     }
     if ($count === 0) return ['error' => $firstError !== '' ? $firstError : 'Unable to queue a backup for this client.'];
     $message = $count === 1 ? 'Backup queued for 1 database.' : "Backup queued for {$count} databases.";
     if ($latestFile !== '') $message .= ' Latest file: ' . $latestFile;
     if ($firstError !== '') $message .= ' One or more databases failed to queue.';
-    return ['message' => $message];
+    return ['message' => $message, 'jobs' => $jobs];
 }
 function queue_backup_for_server(PDO $db, int $serverId): array {
     $stmt = $db->prepare("SELECT * FROM servers WHERE id = ?");
@@ -433,7 +482,41 @@ function queue_backup_for_server(PDO $db, int $serverId): array {
     if (isset($backup['error'])) return ['error' => (string)$backup['error']];
     $message = 'Full-node backup queued for ' . $server['name'] . '.';
     if (!empty($backup['file'])) $message .= ' File: ' . $backup['file'];
-    return ['message' => $message];
+    return ['message' => $message, 'jobs' => [[
+        'scope' => 'node',
+        'target_label' => (string)$server['name'],
+        'server_id' => $serverId,
+        'client_id' => null,
+        'tdb_id' => null,
+        'file_name' => (string)($backup['file'] ?? ''),
+        'file_path' => (string)($backup['path'] ?? ''),
+        'status' => 'queued',
+        'message' => $message,
+    ]]];
+}
+function rotate_database_password(PDO $db, int $tdbId, ?int $clientId = null): array {
+    $sql = "SELECT t.*, s.name AS server_name, s.host, s.agent_key, s.public_url
+            FROM tenant_dbs t
+            JOIN servers s ON s.id = t.server_id
+            WHERE t.id = ?";
+    $params = [$tdbId];
+    if ($clientId !== null) {
+        $sql .= " AND t.client_id = ?";
+        $params[] = $clientId;
+    }
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) return ['error' => 'Database asset not found.'];
+    $node = call_agent($row, ['action' => 'rotate_password', 'post_data' => ['db_user' => $row['db_user']]]);
+    if (isset($node['error'])) return ['error' => (string)$node['error']];
+    return [
+        'message' => 'Password rotated for ' . $row['db_name'] . '.',
+        'download' => enrich_download_env($node['download'] ?? null, $row),
+        'database_name' => (string)$row['db_name'],
+        'client_id' => (int)$row['client_id'],
+        'tdb_id' => (int)$row['id'],
+    ];
 }
 function provision_database_for_client(PDO $db, int $clientId): array {
     $me_stmt = $db->prepare("SELECT c.*, p.db_limit, p.disk_quota_gb, p.max_conns FROM clients c JOIN packages p ON c.package_id = p.id WHERE c.id = ?");
@@ -1121,6 +1204,13 @@ $error = consume_flash('error');
 <footer class="text-center py-32 text-[10px] font-black text-slate-800 uppercase tracking-[1em]">Shield Infrastructure &bull; Version 5.0 Core</footer>
 </body></html>
 PHPHUB
+
+  if [[ -f "$SCRIPT_DIR/templates/hub-index.php" ]]; then
+    cp "$SCRIPT_DIR/templates/hub-index.php" "$HUB_ROOT/index.php"
+  fi
+  if [[ -f "$SCRIPT_DIR/templates/hub-view.php" ]]; then
+    cp "$SCRIPT_DIR/templates/hub-view.php" "$HUB_ROOT/hub-view.php"
+  fi
 
   sed -i "s|__HUB_USER__|$(sed_escape "$HUB_ADMIN_USER")|g" "$HUB_ROOT/index.php"
   sed -i "s|__HUB_HASH__|$(sed_escape "$HUB_ADMIN_HASH")|g" "$HUB_ROOT/index.php"
