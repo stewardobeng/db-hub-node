@@ -181,9 +181,9 @@ function clear_failed_login(PDO $db, string $ip): void {
 }
 function call_agent(array $server, array $params = []): array {
     if (empty($server['public_url']) || empty($server['agent_key'])) return ['error' => 'Server configuration is incomplete.'];
-    $query = array_merge(['key' => $server['agent_key']], array_diff_key($params, ['post_data' => true]));
+    $query = array_merge(['key' => $server['agent_key']], array_diff_key($params, ['post_data' => true, 'timeout' => true]));
     $ch = curl_init(rtrim((string)$server['public_url'], '/') . "/agent-api/agent.php?" . http_build_query($query));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); curl_setopt($ch, CURLOPT_TIMEOUT, max(5, (int)($params['timeout'] ?? 5)));
     if (!empty($params['post_data'])) {
         curl_setopt($ch, CURLOPT_POST, true); curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params['post_data']));
     }
@@ -312,6 +312,162 @@ function sync_client_usage(PDO $db, int $clientId): void {
         }
     }
 }
+function load_package(PDO $db, int $packageId): ?array {
+    $stmt = $db->prepare("SELECT * FROM packages WHERE id = ?");
+    $stmt->execute([$packageId]);
+    $package = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $package ?: null;
+}
+function normalise_client_status(string $status): string {
+    return in_array($status, ['active', 'pending', 'expired'], true) ? $status : 'active';
+}
+function resolve_client_expiry(array $package, string $status, string $value): ?string {
+    $value = trim($value);
+    if ($value !== '') {
+        $ts = strtotime($value);
+        if ($ts === false) throw new InvalidArgumentException('Provide a valid expiry date.');
+        return date('Y-m-d H:i:s', $ts);
+    }
+    if ($status === 'active') return date('Y-m-d H:i:s', strtotime('+' . ((int)($package['duration_days'] ?: 30)) . ' days'));
+    if ($status === 'expired') return date('Y-m-d H:i:s', time() - 60);
+    return null;
+}
+function datetime_local_value(?string $value): string {
+    if (!$value) return '';
+    $ts = strtotime($value);
+    return $ts === false ? '' : date('Y-m-d\TH:i', $ts);
+}
+function upsert_env_value(string $content, string $key, string $value): string {
+    $pattern = '/^' . preg_quote($key, '/') . '=.*$/m';
+    if (preg_match($pattern, $content)) {
+        return (string)preg_replace_callback($pattern, static fn() => $key . '=' . $value, $content, 1);
+    }
+    $content = rtrim($content, "\r\n");
+    return $content === '' ? $key . '=' . $value : $content . "\n" . $key . '=' . $value;
+}
+function server_database_endpoint(array $server): array {
+    $publicHost = (string)(parse_url((string)($server['public_url'] ?? ''), PHP_URL_HOST) ?: '');
+    $configuredHost = trim((string)($server['host'] ?? ''));
+    $host = $configuredHost !== '' ? $configuredHost : $publicHost;
+    $port = 3306;
+    if ($configuredHost !== '') {
+        if (preg_match('/^\[(.+)\]:(\d{1,5})$/', $configuredHost, $m)) {
+            $host = $m[1];
+            $port = (int)$m[2];
+        } elseif (substr_count($configuredHost, ':') === 1 && preg_match('/^([^:]+):(\d{1,5})$/', $configuredHost, $m)) {
+            $host = $m[1];
+            $port = (int)$m[2];
+        }
+    }
+    return ['host' => $host !== '' ? $host : 'localhost', 'port' => $port > 0 ? $port : 3306];
+}
+function enrich_download_env(?array $download, array $server): ?array {
+    if (!$download) return null;
+    $endpoint = server_database_endpoint($server);
+    $content = (string)($download['content'] ?? '');
+    $content = upsert_env_value($content, 'DB_HOST', $endpoint['host']);
+    $content = upsert_env_value($content, 'DB_PORT', (string)$endpoint['port']);
+    $download['content'] = rtrim($content, "\r\n") . "\n";
+    return $download;
+}
+function queue_backup(array $server, array $dbNames = []): array {
+    $postData = [];
+    $dbNames = array_values(array_unique(array_filter(array_map('trim', $dbNames))));
+    if (count($dbNames) === 1) $postData['db_name'] = $dbNames[0];
+    elseif ($dbNames) $postData['db_names'] = json_encode($dbNames);
+    return call_agent($server, ['action' => 'trigger_backup', 'post_data' => $postData, 'timeout' => 15]);
+}
+function queue_backup_for_database(PDO $db, int $tdbId, ?int $clientId = null): array {
+    $sql = "SELECT t.db_name, t.client_id, s.name AS server_name, s.agent_key, s.public_url
+            FROM tenant_dbs t
+            JOIN servers s ON s.id = t.server_id
+            WHERE t.id = ?";
+    $params = [$tdbId];
+    if ($clientId !== null) {
+        $sql .= " AND t.client_id = ?";
+        $params[] = $clientId;
+    }
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) return ['error' => 'Database asset not found.'];
+    $backup = queue_backup($row, [(string)$row['db_name']]);
+    if (isset($backup['error'])) return ['error' => (string)$backup['error']];
+    $message = 'Backup queued for ' . $row['db_name'] . ' on ' . $row['server_name'] . '.';
+    if (!empty($backup['file'])) $message .= ' File: ' . $backup['file'];
+    return ['message' => $message];
+}
+function queue_backup_for_client(PDO $db, int $clientId): array {
+    $stmt = $db->prepare("SELECT t.db_name, s.name AS server_name, s.agent_key, s.public_url
+                          FROM tenant_dbs t
+                          JOIN servers s ON s.id = t.server_id
+                          WHERE t.client_id = ?
+                          ORDER BY t.id");
+    $stmt->execute([$clientId]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!$rows) return ['error' => 'This client does not have any provisioned databases yet.'];
+    $count = 0;
+    $latestFile = '';
+    $firstError = '';
+    foreach ($rows as $row) {
+        $backup = queue_backup($row, [(string)$row['db_name']]);
+        if (isset($backup['error'])) {
+            if ($firstError === '') $firstError = $row['db_name'] . ': ' . (string)$backup['error'];
+            continue;
+        }
+        $count++;
+        if (!empty($backup['file'])) $latestFile = (string)$backup['file'];
+    }
+    if ($count === 0) return ['error' => $firstError !== '' ? $firstError : 'Unable to queue a backup for this client.'];
+    $message = $count === 1 ? 'Backup queued for 1 database.' : "Backup queued for {$count} databases.";
+    if ($latestFile !== '') $message .= ' Latest file: ' . $latestFile;
+    if ($firstError !== '') $message .= ' One or more databases failed to queue.';
+    return ['message' => $message];
+}
+function queue_backup_for_server(PDO $db, int $serverId): array {
+    $stmt = $db->prepare("SELECT * FROM servers WHERE id = ?");
+    $stmt->execute([$serverId]);
+    $server = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$server) return ['error' => 'Node not found.'];
+    $backup = queue_backup($server);
+    if (isset($backup['error'])) return ['error' => (string)$backup['error']];
+    $message = 'Full-node backup queued for ' . $server['name'] . '.';
+    if (!empty($backup['file'])) $message .= ' File: ' . $backup['file'];
+    return ['message' => $message];
+}
+function provision_database_for_client(PDO $db, int $clientId): array {
+    $me_stmt = $db->prepare("SELECT c.*, p.db_limit, p.disk_quota_gb, p.max_conns FROM clients c JOIN packages p ON c.package_id = p.id WHERE c.id = ?");
+    $me_stmt->execute([$clientId]);
+    $me = $me_stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$me) return ['error' => 'Client account was not found.'];
+    if (!is_client_active($me)) return ['error' => 'Client account is not active.'];
+
+    $countStmt = $db->prepare("SELECT COUNT(*) FROM tenant_dbs WHERE client_id = ?");
+    $countStmt->execute([$clientId]);
+    if ((int)$countStmt->fetchColumn() >= (int)$me['db_limit']) return ['error' => 'Database limit reached for this package.'];
+
+    sync_client_usage($db, $clientId);
+    $usageStmt = $db->prepare("SELECT COALESCE(SUM(last_size_mb), 0) FROM tenant_dbs WHERE client_id = ?");
+    $usageStmt->execute([$clientId]);
+    if ((float)$usageStmt->fetchColumn() >= ((int)$me['disk_quota_gb'] * 1024)) return ['error' => 'Disk quota reached for this package.'];
+
+    $servers = $db->query("SELECT * FROM servers")->fetchAll(PDO::FETCH_ASSOC);
+    $best = null; $min = 101;
+    foreach($servers as $s) {
+        $stats = call_agent($s, ['action' => 'stats']);
+        if (!isset($stats['error']) && (int)($stats['cpu'] ?? 101) < $min) { $min = (int)$stats['cpu']; $best = $s; }
+    }
+    if (!$best) return ['error' => 'No online nodes are available right now.'];
+
+    $prefix = bin2hex(random_bytes(4));
+    $dbName = $prefix . '_db';
+    $dbUser = $prefix . '_user';
+    $node = call_agent($best, ['action' => 'create', 'post_data' => ['db_prefix' => $prefix, 'db_suffix' => 'db', 'remote_host' => '%', 'max_conns' => $me['max_conns']]]);
+    if (isset($node['error'])) return ['error' => (string)$node['error']];
+
+    $db->prepare("INSERT INTO tenant_dbs (client_id, server_id, db_name, db_user, allowed_ips, last_size_mb) VALUES (?,?,?,?,?,0)")->execute([$clientId, $best['id'], $dbName, $dbUser, json_encode(['%'])]);
+    return ['message' => 'Database provisioned successfully.', 'download' => enrich_download_env($node['download'] ?? null, $best)];
+}
 
 if (isset($_GET['action']) && $_GET['action'] === 'watchdog') {
     $db = hub_db();
@@ -394,9 +550,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim((string)($_POST['email'] ?? ''));
         $plainPassword = (string)($_POST['password'] ?? '');
         $pkg_id = (int)($_POST['package_id'] ?? 0);
-        $pkg = $db->prepare("SELECT * FROM packages WHERE id = ?");
-        $pkg->execute([$pkg_id]);
-        $package = $pkg->fetch(PDO::FETCH_ASSOC);
+        $package = load_package($db, $pkg_id);
         if (!$package || !filter_var($email, FILTER_VALIDATE_EMAIL) || $plainPassword === '') {
             flash('error', 'Provide a valid email, password, and package.');
             header('Location: ?view=landing');
@@ -450,31 +604,158 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    if ($action === 'provision' && $client_id) {
-        $me_stmt = $db->prepare("SELECT c.*, p.db_limit, p.disk_quota_gb, p.max_conns FROM clients c JOIN packages p ON c.package_id = p.id WHERE c.id = ?");
-        $me_stmt->execute([$client_id]); $me = $me_stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$me || !is_client_active($me)) { flash('error', 'Your account is not active.'); header('Location: ?view=client'); exit; }
-        $countStmt = $db->prepare("SELECT COUNT(*) FROM tenant_dbs WHERE client_id = ?");
-        $countStmt->execute([$client_id]);
-        if ((int)$countStmt->fetchColumn() >= (int)$me['db_limit']) { flash('error', 'Database limit reached for your package.'); header('Location: ?view=client'); exit; }
-        sync_client_usage($db, $client_id);
-        $usageStmt = $db->prepare("SELECT COALESCE(SUM(last_size_mb), 0) FROM tenant_dbs WHERE client_id = ?");
-        $usageStmt->execute([$client_id]);
-        if ((float)$usageStmt->fetchColumn() >= ((int)$me['disk_quota_gb'] * 1024)) { flash('error', 'Disk quota reached for your package.'); header('Location: ?view=client'); exit; }
-        $servers = $db->query("SELECT * FROM servers")->fetchAll(PDO::FETCH_ASSOC);
-        $best = null; $min = 101;
-        foreach($servers as $s) {
-            $stats = call_agent($s, ['action' => 'stats']);
-            if (!isset($stats['error']) && (int)($stats['cpu'] ?? 101) < $min) { $min = (int)$stats['cpu']; $best = $s; }
+    if ($action === 'update_server' && $is_admin) {
+        $server_id = (int)($_POST['server_id'] ?? 0);
+        $name = trim((string)($_POST['name'] ?? ''));
+        $host = trim((string)($_POST['host'] ?? ''));
+        $agent_key = trim((string)($_POST['agent_key'] ?? ''));
+        $public_url = rtrim(trim((string)($_POST['public_url'] ?? '')), '/');
+        $pma_alias = trim((string)($_POST['pma_alias'] ?? 'phpmyadmin'), '/');
+        if ($server_id < 1 || $name === '' || $host === '' || $agent_key === '' || !filter_var($public_url, FILTER_VALIDATE_URL) || !preg_match('/^[A-Za-z0-9_-]+$/', $pma_alias)) {
+            flash('error', 'Provide valid node details.');
+            header('Location: ?view=admin');
+            exit;
         }
-        if (!$best) { flash('error', 'No online nodes are available right now.'); header('Location: ?view=client'); exit; }
-        $prefix = bin2hex(random_bytes(4));
-        $node = call_agent($best, ['action' => 'create', 'post_data' => ['db_prefix' => $prefix, 'db_suffix' => 'db', 'remote_host' => '%', 'max_conns' => $me['max_conns']]]);
-        if (!isset($node['error'])) {
-            $db->prepare("INSERT INTO tenant_dbs (client_id, server_id, db_name, db_user, allowed_ips, last_size_mb) VALUES (?,?,?,?,?,0)")->execute([$client_id, $best['id'], $prefix . '_db', $prefix . '_user', json_encode(['%'])]);
-            $_SESSION['download'] = $node['download'];
-            flash('message', 'Database provisioned successfully.');
-        } else flash('error', (string)$node['error']);
+        $serverStmt = $db->prepare("SELECT * FROM servers WHERE id = ?");
+        $serverStmt->execute([$server_id]);
+        if (!$serverStmt->fetch(PDO::FETCH_ASSOC)) {
+            flash('error', 'Node not found.');
+            header('Location: ?view=admin');
+            exit;
+        }
+        $exists = $db->prepare("SELECT id FROM servers WHERE id != ? AND (host = ? OR public_url = ?)");
+        $exists->execute([$server_id, $host, $public_url]);
+        if ($exists->fetchColumn()) {
+            flash('error', 'Another node already uses that host or endpoint.');
+            header('Location: ?view=admin');
+            exit;
+        }
+        $probe = call_agent(['agent_key' => $agent_key, 'public_url' => $public_url], ['action' => 'stats']);
+        $last_seen = isset($probe['error']) ? null : date('Y-m-d H:i:s');
+        $db->prepare("UPDATE servers SET name = ?, host = ?, agent_key = ?, public_url = ?, pma_alias = ?, last_seen = ? WHERE id = ?")->execute([$name, $host, $agent_key, $public_url, $pma_alias, $last_seen, $server_id]);
+        flash(isset($probe['error']) ? 'error' : 'message', isset($probe['error']) ? 'Node updated, but the health check failed.' : 'Node updated and reachable.');
+        header('Location: ?view=admin');
+        exit;
+    }
+
+    if ($action === 'delete_server' && $is_admin) {
+        $server_id = (int)($_POST['server_id'] ?? 0);
+        $assetStmt = $db->prepare("SELECT COUNT(*) FROM tenant_dbs WHERE server_id = ?");
+        $assetStmt->execute([$server_id]);
+        if ((int)$assetStmt->fetchColumn() > 0) {
+            flash('error', 'Cannot delete a node that still has provisioned databases.');
+            header('Location: ?view=admin');
+            exit;
+        }
+        $db->prepare("DELETE FROM servers WHERE id = ?")->execute([$server_id]);
+        flash('message', 'Node removed.');
+        header('Location: ?view=admin');
+        exit;
+    }
+
+    if ($action === 'create_client' && $is_admin) {
+        $email = trim((string)($_POST['email'] ?? ''));
+        $plainPassword = (string)($_POST['password'] ?? '');
+        $pkg_id = (int)($_POST['package_id'] ?? 0);
+        $status = normalise_client_status((string)($_POST['status'] ?? 'active'));
+        $package = load_package($db, $pkg_id);
+        if (!$package || !filter_var($email, FILTER_VALIDATE_EMAIL) || $plainPassword === '') {
+            flash('error', 'Provide a valid email, password, and package.');
+            header('Location: ?view=admin');
+            exit;
+        }
+        try {
+            $expiry = resolve_client_expiry($package, $status, (string)($_POST['expires_at'] ?? ''));
+            $db->prepare("INSERT INTO clients (email, password_hash, package_id, expires_at, status) VALUES (?,?,?,?,?)")->execute([$email, password_hash($plainPassword, PASSWORD_DEFAULT), $pkg_id, $expiry, $status]);
+            flash('message', 'Client account created.');
+        } catch (InvalidArgumentException $e) {
+            flash('error', $e->getMessage());
+        } catch (Throwable $e) {
+            flash('error', 'Client account already exists.');
+        }
+        header('Location: ?view=admin');
+        exit;
+    }
+
+    if ($action === 'update_client' && $is_admin) {
+        $client_target = (int)($_POST['client_id'] ?? 0);
+        $email = trim((string)($_POST['email'] ?? ''));
+        $plainPassword = (string)($_POST['password'] ?? '');
+        $pkg_id = (int)($_POST['package_id'] ?? 0);
+        $status = normalise_client_status((string)($_POST['status'] ?? 'active'));
+        $package = load_package($db, $pkg_id);
+        $clientStmt = $db->prepare("SELECT * FROM clients WHERE id = ?");
+        $clientStmt->execute([$client_target]);
+        if (!$clientStmt->fetch(PDO::FETCH_ASSOC) || !$package || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            flash('error', 'Provide valid client details.');
+            header('Location: ?view=admin');
+            exit;
+        }
+        try {
+            $expiry = resolve_client_expiry($package, $status, (string)($_POST['expires_at'] ?? ''));
+            if ($plainPassword !== '') {
+                $db->prepare("UPDATE clients SET email = ?, password_hash = ?, package_id = ?, expires_at = ?, status = ? WHERE id = ?")->execute([$email, password_hash($plainPassword, PASSWORD_DEFAULT), $pkg_id, $expiry, $status, $client_target]);
+            } else {
+                $db->prepare("UPDATE clients SET email = ?, package_id = ?, expires_at = ?, status = ? WHERE id = ?")->execute([$email, $pkg_id, $expiry, $status, $client_target]);
+            }
+            flash('message', 'Client account updated.');
+        } catch (InvalidArgumentException $e) {
+            flash('error', $e->getMessage());
+        } catch (Throwable $e) {
+            flash('error', 'Unable to update the client account.');
+        }
+        header('Location: ?view=admin');
+        exit;
+    }
+
+    if ($action === 'delete_client' && $is_admin) {
+        $client_target = (int)($_POST['client_id'] ?? 0);
+        $assetStmt = $db->prepare("SELECT COUNT(*) FROM tenant_dbs WHERE client_id = ?");
+        $assetStmt->execute([$client_target]);
+        if ((int)$assetStmt->fetchColumn() > 0) {
+            flash('error', 'Cannot delete a client that still owns provisioned databases.');
+            header('Location: ?view=admin');
+            exit;
+        }
+        $db->prepare("DELETE FROM clients WHERE id = ?")->execute([$client_target]);
+        flash('message', 'Client account removed.');
+        header('Location: ?view=admin');
+        exit;
+    }
+
+    if ($action === 'admin_provision' && $is_admin) {
+        $result = provision_database_for_client($db, (int)($_POST['client_id'] ?? 0));
+        if (!empty($result['download'])) $_SESSION['download'] = $result['download'];
+        flash(isset($result['error']) ? 'error' : 'message', (string)($result['error'] ?? $result['message'] ?? 'Provision request completed.'));
+        header('Location: ?view=admin');
+        exit;
+    }
+
+    if ($action === 'backup_server' && $is_admin) {
+        $result = queue_backup_for_server($db, (int)($_POST['server_id'] ?? 0));
+        flash(isset($result['error']) ? 'error' : 'message', (string)($result['error'] ?? $result['message'] ?? 'Backup request completed.'));
+        header('Location: ?view=admin');
+        exit;
+    }
+
+    if ($action === 'backup_client' && $is_admin) {
+        $result = queue_backup_for_client($db, (int)($_POST['client_id'] ?? 0));
+        flash(isset($result['error']) ? 'error' : 'message', (string)($result['error'] ?? $result['message'] ?? 'Backup request completed.'));
+        header('Location: ?view=admin');
+        exit;
+    }
+
+    if ($action === 'provision' && $client_id) {
+        $result = provision_database_for_client($db, (int)$client_id);
+        if (!empty($result['download'])) $_SESSION['download'] = $result['download'];
+        flash(isset($result['error']) ? 'error' : 'message', (string)($result['error'] ?? $result['message'] ?? 'Provision request completed.'));
+        header('Location: ?view=client');
+        exit;
+    }
+
+    if ($action === 'backup_db' && $client_id) {
+        $result = queue_backup_for_database($db, (int)($_POST['tdb_id'] ?? 0), (int)$client_id);
+        flash(isset($result['error']) ? 'error' : 'message', (string)($result['error'] ?? $result['message'] ?? 'Backup request completed.'));
         header('Location: ?view=client');
         exit;
     }
@@ -498,7 +779,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 if (isset($_GET['action']) && $_GET['action'] === 'logout') { session_destroy(); header('Location: ?'); exit; }
 
-if (isset($_GET['download']) && $client_id && !empty($_SESSION['download'])) {
+if (isset($_GET['download']) && ($client_id || $is_admin) && !empty($_SESSION['download'])) {
     $download = $_SESSION['download'];
     unset($_SESSION['download']);
     header('Content-Type: text/plain; charset=utf-8');
@@ -522,8 +803,11 @@ if ($client_id) {
     $client_db_count = (int)$usageRow[0];
     $client_usage_mb = (float)$usageRow[1];
 }
-$servers = $db->query("SELECT * FROM servers ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+$servers = $db->query("SELECT s.*, COUNT(t.id) AS db_count FROM servers s LEFT JOIN tenant_dbs t ON t.server_id = s.id GROUP BY s.id ORDER BY s.name")->fetchAll(PDO::FETCH_ASSOC);
 $packages = $db->query("SELECT * FROM packages")->fetchAll(PDO::FETCH_ASSOC);
+$admin_clients = $is_admin
+    ? $db->query("SELECT c.*, p.name AS package_name, COUNT(t.id) AS db_count, COALESCE(SUM(t.last_size_mb), 0) AS usage_mb FROM clients c LEFT JOIN packages p ON p.id = c.package_id LEFT JOIN tenant_dbs t ON t.client_id = c.id GROUP BY c.id ORDER BY c.id DESC")->fetchAll(PDO::FETCH_ASSOC)
+    : [];
 $message = consume_flash('message');
 $error = consume_flash('error');
 
@@ -571,9 +855,9 @@ $error = consume_flash('error');
             <div class="space-y-4 mb-8 text-left"><?= alert_html($message) ?><?= alert_html($error, 'error') ?></div>
             <div class="space-y-8 text-left">
                 <div><label class="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block">Identity</label>
-                <input type="text" name="email" placeholder="ADMIN OR CLIENT EMAIL" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-bold tracking-widest" required autofocus></div>
+                <input type="text" name="email" placeholder="Admin or client email" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-bold tracking-widest" required autofocus></div>
                 <div><label class="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block">Security Token</label>
-                <input type="password" name="password" placeholder="••••••••" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-bold tracking-widest" required></div>
+                <input type="password" name="password" placeholder="Enter password" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-bold tracking-widest" required></div>
                 <button class="w-full bg-indigo-600 py-6 rounded-3xl text-white font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-indigo-500/20 hover:bg-indigo-500 transition-all">Unlock Environment</button>
             </div>
         </form>
@@ -587,8 +871,8 @@ $error = consume_flash('error');
             <h2 class="text-3xl font-black text-white mb-10 tracking-tighter text-center uppercase">Create Tenant Account</h2>
             <div class="space-y-4 mb-8"><?= alert_html($message) ?><?= alert_html($error, 'error') ?></div>
             <div class="space-y-8">
-                <input type="email" name="email" placeholder="IDENTITY@EMAIL.COM" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-bold tracking-widest" required autofocus>
-                <input type="password" name="password" placeholder="CHOOSE SECURE KEY" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-bold tracking-widest" required>
+                <input type="email" name="email" placeholder="name@example.com" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-bold tracking-widest" required autofocus>
+                <input type="password" name="password" placeholder="Choose a secure password" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white focus:ring-indigo-500 text-xs font-bold tracking-widest" required>
                 <button class="w-full bg-indigo-600 py-6 rounded-3xl text-white font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-indigo-500/20 hover:bg-indigo-500 transition-all"><?= paystack_enabled() ? 'Continue To Billing' : 'Generate Account' ?></button>
             </div>
         </form>
@@ -633,6 +917,12 @@ $error = consume_flash('error');
                 <p class="text-slate-600 text-[10px] font-black uppercase tracking-widest mb-10">Usage: <span class="text-white"><?= number_format((float)$row['last_size_mb'], 2) ?>MB</span></p>
                 <div class="grid grid-cols-1 gap-4">
                     <a href="<?= rtrim((string)$row['public_url'], '/') ?>/<?= e(trim((string)($row['pma_alias'] ?: 'phpmyadmin'), '/')) ?>" target="_blank" class="bg-slate-800 text-center py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all">Admin Gateway</a>
+                    <form method="post">
+                        <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+                        <input type="hidden" name="action" value="backup_db">
+                        <input type="hidden" name="tdb_id" value="<?= (int)$row['id'] ?>">
+                        <button class="w-full bg-emerald-600 text-white text-center py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all">Create Backup</button>
+                    </form>
                     <button onclick="document.getElementById('modal-ips-<?= $row['id'] ?>').classList.remove('hidden')" class="border border-indigo-500/20 text-indigo-400 text-center py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all">Node Guard</button>
                 </div>
             </div>
@@ -641,7 +931,7 @@ $error = consume_flash('error');
                     <input type="hidden" name="action" value="update_whitelist"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><input type="hidden" name="tdb_id" value="<?= $row['id'] ?>">
                     <h2 class="text-2xl font-black text-white mb-4 tracking-tighter uppercase text-center">Identity Firewall</h2>
                     <p class="text-xs text-slate-500 mb-10 font-bold uppercase tracking-widest text-center italic">Restrict database access to specific IP origins</p>
-                    <textarea name="ips" class="w-full bg-slate-950 border-white/5 rounded-2xl p-6 text-white font-mono text-sm mb-10 focus:ring-indigo-500" rows="3"><?= implode(',', json_decode($row['allowed_ips'], true) ?: ['%']) ?></textarea>
+                    <textarea name="ips" class="w-full bg-slate-950 border-white/5 rounded-2xl p-6 text-white font-mono text-sm mb-10 focus:ring-indigo-500" rows="3" placeholder="127.0.0.1, 203.0.113.10 or %"><?= implode(',', json_decode($row['allowed_ips'], true) ?: ['%']) ?></textarea>
                     <div class="flex justify-end space-x-6"><button type="button" onclick="this.closest('[id^=modal-ips]').classList.add('hidden')" class="text-slate-600 font-black uppercase text-[10px] tracking-widest">Cancel</button>
                     <button class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px]">Sync Origin Rules</button></div>
                 </form></div>
@@ -656,6 +946,12 @@ $error = consume_flash('error');
     </header>
     <main class="max-w-7xl mx-auto px-16 py-16 space-y-16">
         <div class="space-y-4"><?= alert_html($message) ?><?= alert_html($error, 'error') ?></div>
+        <?php if (!empty($_SESSION['download'])): ?>
+        <div class="bg-indigo-600 p-10 rounded-[3rem] shadow-2xl flex items-center justify-between">
+            <div><h3 class="text-white font-black text-xl tracking-tighter uppercase">Provision Vault Ready</h3><p class="text-indigo-200 text-[10px] font-black uppercase tracking-widest">Latest generated tenant environment file is ready for download</p></div>
+            <a href="?download=1" class="bg-white text-indigo-600 px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl">Retrieve .env</a>
+        </div>
+        <?php endif; ?>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
             <?php foreach([['Active Nodes','servers','fa-server','indigo'],['Registered Clients','clients','fa-user-group','emerald'],['Managed Assets','tenant_dbs','fa-database','amber']] as $c): ?>
             <div class="bg-slate-900 p-10 rounded-[3rem] border border-white/5 shadow-xl text-left">
@@ -669,12 +965,71 @@ $error = consume_flash('error');
         </div>
         <div class="bg-slate-900 rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
             <table class="min-w-full divide-y divide-white/5 text-left">
-                <thead class="bg-white/5"><tr><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Node Identifier</th><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Internal Host</th><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">phpMyAdmin Alias</th><th class="px-10 py-6 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">operational status</th></tr></thead>
-                <tbody class="divide-y divide-white/5"><?php foreach($servers as $s): ?>
+                <thead class="bg-white/5"><tr><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Node Identifier</th><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Database Host / IP</th><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Public Endpoint</th><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">phpMyAdmin Alias</th><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Assets</th><th class="px-10 py-6 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Operational Status</th><th class="px-10 py-6 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Actions</th></tr></thead>
+                <tbody class="divide-y divide-white/5"><?php if (!$servers): ?>
+                    <tr><td colspan="7" class="px-10 py-12 text-center text-sm font-bold text-slate-500">No nodes linked yet.</td></tr>
+                <?php else: foreach($servers as $s): $lastSeen = strtotime((string)($s['last_seen'] ?? '')); $healthy = $lastSeen !== false && (time() - $lastSeen < 600); $serverDeleteDisabled = (int)$s['db_count'] > 0; $serverBackupDisabled = !$healthy; ?>
                     <tr><td class="px-10 py-8 font-black text-white text-lg tracking-tight"><?= e($s['name']) ?></td>
-                        <td class="px-10 py-8 text-xs font-bold font-mono text-slate-500 uppercase"><?= e($s['host']) ?></td>
-                        <td class="px-10 py-8 text-xs font-bold font-mono text-slate-500 uppercase"><?= e((string)($s['pma_alias'] ?: 'phpmyadmin')) ?></td>
-                        <td class="px-10 py-8 text-center"><span class="text-[10px] font-black uppercase tracking-widest <?= (time()-strtotime($s['last_seen']??'0') < 600) ? 'text-emerald-500' : 'text-red-500' ?> animate-pulse">● <?= (time()-strtotime($s['last_seen']??'0') < 600) ? 'Healthy' : 'Sync Error' ?></span></td></tr><?php endforeach; ?>
+                        <td class="px-10 py-8 text-xs font-bold font-mono text-slate-500"><?= e($s['host']) ?></td>
+                        <td class="px-10 py-8 text-xs font-bold font-mono text-slate-500"><?= e($s['public_url']) ?></td>
+                        <td class="px-10 py-8 text-xs font-bold font-mono text-slate-500"><?= e((string)($s['pma_alias'] ?: 'phpmyadmin')) ?></td>
+                        <td class="px-10 py-8 text-xs font-bold text-slate-500 uppercase"><?= (int)$s['db_count'] ?> databases</td>
+                        <td class="px-10 py-8 text-center"><span class="text-[10px] font-black uppercase tracking-widest <?= $healthy ? 'text-emerald-500' : 'text-red-500' ?>"><?= $healthy ? '&bull; Healthy' : '&bull; Sync Error' ?></span></td>
+                        <td class="px-10 py-8"><div class="flex items-center justify-end gap-3">
+                            <form method="post">
+                                <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+                                <input type="hidden" name="action" value="backup_server">
+                                <input type="hidden" name="server_id" value="<?= (int)$s['id'] ?>">
+                                <button class="<?= $serverBackupDisabled ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-500' ?> px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all" <?= $serverBackupDisabled ? 'disabled' : '' ?>>Backup</button>
+                            </form>
+                            <button type="button" onclick="document.getElementById('modal-server-<?= $s['id'] ?>').classList.remove('hidden')" class="bg-white/5 text-white px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">Edit</button>
+                            <form method="post" onsubmit="return confirm('Remove this node from the hub?');">
+                                <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+                                <input type="hidden" name="action" value="delete_server">
+                                <input type="hidden" name="server_id" value="<?= (int)$s['id'] ?>">
+                                <button class="<?= $serverDeleteDisabled ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-red-500/10 text-red-300 hover:bg-red-500 hover:text-white' ?> px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all" <?= $serverDeleteDisabled ? 'disabled' : '' ?>>Delete</button>
+                            </form>
+                        </div></td></tr><?php endforeach; endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <div class="flex items-center justify-between border-t border-white/5 pt-16">
+            <h2 class="text-3xl font-black text-white tracking-tighter uppercase">Tenant Accounts</h2>
+            <button onclick="document.getElementById('modal-client-add').classList.remove('hidden')" class="bg-emerald-600 text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-500/20">Create Tenant</button>
+        </div>
+        <div class="bg-slate-900 rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
+            <table class="min-w-full divide-y divide-white/5 text-left">
+                <thead class="bg-white/5"><tr><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Identity</th><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Package</th><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Status</th><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Expires</th><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Databases</th><th class="px-10 py-6 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Storage</th><th class="px-10 py-6 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Actions</th></tr></thead>
+                <tbody class="divide-y divide-white/5"><?php if (!$admin_clients): ?>
+                    <tr><td colspan="7" class="px-10 py-12 text-center text-sm font-bold text-slate-500">No tenant accounts created yet.</td></tr>
+                <?php else: foreach($admin_clients as $adminClient): $clientDeleteDisabled = (int)$adminClient['db_count'] > 0; $clientHealthy = is_client_active($adminClient); $clientBackupDisabled = (int)$adminClient['db_count'] < 1; $statusClass = ($adminClient['status'] ?? '') === 'active' ? 'text-emerald-400' : (($adminClient['status'] ?? '') === 'pending' ? 'text-amber-400' : 'text-red-400'); ?>
+                    <tr><td class="px-10 py-8"><div class="font-black text-white text-lg tracking-tight"><?= e($adminClient['email']) ?></div><div class="text-[10px] font-black uppercase tracking-widest text-slate-600">Client #<?= (int)$adminClient['id'] ?></div></td>
+                        <td class="px-10 py-8 text-xs font-bold text-slate-400 uppercase"><?= e((string)($adminClient['package_name'] ?: 'Unassigned')) ?></td>
+                        <td class="px-10 py-8"><span class="text-[10px] font-black uppercase tracking-widest <?= $statusClass ?>"><?= e((string)$adminClient['status']) ?></span></td>
+                        <td class="px-10 py-8 text-xs font-bold text-slate-400"><?= e((string)($adminClient['expires_at'] ?: 'Not scheduled')) ?></td>
+                        <td class="px-10 py-8 text-xs font-bold text-slate-400 uppercase"><?= (int)$adminClient['db_count'] ?> in use</td>
+                        <td class="px-10 py-8 text-xs font-bold text-slate-400 uppercase"><?= number_format(((float)$adminClient['usage_mb']) / 1024, 2) ?>GB</td>
+                        <td class="px-10 py-8"><div class="flex items-center justify-end gap-3">
+                            <form method="post">
+                                <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+                                <input type="hidden" name="action" value="admin_provision">
+                                <input type="hidden" name="client_id" value="<?= (int)$adminClient['id'] ?>">
+                                <button class="<?= $clientHealthy ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-800 text-slate-600 cursor-not-allowed' ?> px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all" <?= $clientHealthy ? '' : 'disabled' ?>>Provision</button>
+                            </form>
+                            <form method="post">
+                                <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+                                <input type="hidden" name="action" value="backup_client">
+                                <input type="hidden" name="client_id" value="<?= (int)$adminClient['id'] ?>">
+                                <button class="<?= $clientBackupDisabled ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-500' ?> px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all" <?= $clientBackupDisabled ? 'disabled' : '' ?>>Backup</button>
+                            </form>
+                            <button type="button" onclick="document.getElementById('modal-client-<?= $adminClient['id'] ?>').classList.remove('hidden')" class="bg-white/5 text-white px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">Edit</button>
+                            <form method="post" onsubmit="return confirm('Delete this client account?');">
+                                <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+                                <input type="hidden" name="action" value="delete_client">
+                                <input type="hidden" name="client_id" value="<?= (int)$adminClient['id'] ?>">
+                                <button class="<?= $clientDeleteDisabled ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-red-500/10 text-red-300 hover:bg-red-500 hover:text-white' ?> px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all" <?= $clientDeleteDisabled ? 'disabled' : '' ?>>Delete</button>
+                            </form>
+                        </div></td></tr><?php endforeach; endif; ?>
                 </tbody>
             </table>
         </div>
@@ -686,15 +1041,82 @@ $error = consume_flash('error');
         <input type="hidden" name="action" value="add_server"><input type="hidden" name="csrf" value="<?= csrf_token() ?>">
         <h2 class="text-3xl font-black text-white mb-10 tracking-tighter text-center uppercase">Provision Remote Infrastructure</h2>
         <div class="space-y-6">
-            <input type="text" name="name" placeholder="NODE LABEL" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest uppercase" required>
-            <input type="text" name="host" placeholder="INTERNAL HOST ADDRESS" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest uppercase" required>
-            <input type="password" name="agent_key" placeholder="AGENT ACCESS TOKEN" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest uppercase" required>
-            <input type="text" name="public_url" placeholder="PUBLIC ENDPOINT (HTTPS)" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest uppercase" required>
-            <input type="text" name="pma_alias" value="phpmyadmin" placeholder="PHPMYADMIN ALIAS" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest uppercase" required>
+            <input type="text" name="name" placeholder="Node label" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+            <input type="text" name="host" placeholder="Database host or IP" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+            <input type="password" name="agent_key" placeholder="Agent access token" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+            <input type="text" name="public_url" placeholder="Public endpoint (http or https)" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+            <input type="text" name="pma_alias" value="phpmyadmin" placeholder="phpMyAdmin alias" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
             <div class="flex justify-end space-x-6 pt-6"><button type="button" onclick="this.closest('#modal-add').classList.add('hidden')" class="text-slate-600 font-black uppercase text-[10px] tracking-widest">Abort</button>
             <button class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px] shadow-xl">Commit Node</button></div>
         </div>
     </form></div>
+
+<?php foreach($servers as $s): ?>
+<div id="modal-server-<?= $s['id'] ?>" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-8 z-50 text-left">
+    <form method="post" class="bg-slate-900 p-12 rounded-[4rem] border border-white/5 w-full max-w-lg shadow-2xl">
+        <input type="hidden" name="action" value="update_server"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><input type="hidden" name="server_id" value="<?= (int)$s['id'] ?>">
+        <h2 class="text-3xl font-black text-white mb-10 tracking-tighter text-center uppercase">Edit Remote Node</h2>
+        <div class="space-y-6">
+            <input type="text" name="name" value="<?= e($s['name']) ?>" placeholder="Node label" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+            <input type="text" name="host" value="<?= e($s['host']) ?>" placeholder="Database host or IP" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+            <input type="text" name="agent_key" value="<?= e($s['agent_key']) ?>" placeholder="Agent access token" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+            <input type="text" name="public_url" value="<?= e($s['public_url']) ?>" placeholder="Public endpoint (http or https)" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+            <input type="text" name="pma_alias" value="<?= e((string)($s['pma_alias'] ?: 'phpmyadmin')) ?>" placeholder="phpMyAdmin alias" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-600">Attached Databases: <?= (int)$s['db_count'] ?></p>
+            <div class="flex justify-end space-x-6 pt-6"><button type="button" onclick="this.closest('[id^=modal-server]').classList.add('hidden')" class="text-slate-600 font-black uppercase text-[10px] tracking-widest">Cancel</button>
+            <button class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px] shadow-xl">Save Node</button></div>
+        </div>
+    </form>
+</div>
+<?php endforeach; ?>
+
+<div id="modal-client-add" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-8 z-50 text-left">
+    <form method="post" class="bg-slate-900 p-12 rounded-[4rem] border border-white/5 w-full max-w-lg shadow-2xl">
+        <input type="hidden" name="action" value="create_client"><input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+        <h2 class="text-3xl font-black text-white mb-10 tracking-tighter text-center uppercase">Create Tenant Account</h2>
+        <div class="space-y-6">
+            <input type="email" name="email" placeholder="tenant@example.com" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+            <input type="password" name="password" placeholder="Initial password" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+            <select name="package_id" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+                <?php foreach($packages as $pkg): ?><option value="<?= (int)$pkg['id'] ?>"><?= e($pkg['name']) ?> - <?= (int)$pkg['db_limit'] ?> DB</option><?php endforeach; ?>
+            </select>
+            <select name="status" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest">
+                <option value="active">Active</option>
+                <option value="pending">Pending</option>
+                <option value="expired">Expired</option>
+            </select>
+            <input type="datetime-local" name="expires_at" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-600">Leave expiry empty to auto-calculate it from the selected status and package.</p>
+            <div class="flex justify-end space-x-6 pt-6"><button type="button" onclick="this.closest('#modal-client-add').classList.add('hidden')" class="text-slate-600 font-black uppercase text-[10px] tracking-widest">Cancel</button>
+            <button class="bg-emerald-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px] shadow-xl">Create Client</button></div>
+        </div>
+    </form>
+</div>
+
+<?php foreach($admin_clients as $adminClient): ?>
+<div id="modal-client-<?= $adminClient['id'] ?>" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-8 z-50 text-left">
+    <form method="post" class="bg-slate-900 p-12 rounded-[4rem] border border-white/5 w-full max-w-lg shadow-2xl">
+        <input type="hidden" name="action" value="update_client"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><input type="hidden" name="client_id" value="<?= (int)$adminClient['id'] ?>">
+        <h2 class="text-3xl font-black text-white mb-10 tracking-tighter text-center uppercase">Edit Tenant Account</h2>
+        <div class="space-y-6">
+            <input type="email" name="email" value="<?= e($adminClient['email']) ?>" placeholder="tenant@example.com" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+            <input type="password" name="password" placeholder="New password (optional)" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest">
+            <select name="package_id" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest" required>
+                <?php foreach($packages as $pkg): ?><option value="<?= (int)$pkg['id'] ?>" <?= (int)$pkg['id'] === (int)$adminClient['package_id'] ? 'selected' : '' ?>><?= e($pkg['name']) ?> - <?= (int)$pkg['db_limit'] ?> DB</option><?php endforeach; ?>
+            </select>
+            <select name="status" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest">
+                <option value="active" <?= ($adminClient['status'] ?? '') === 'active' ? 'selected' : '' ?>>Active</option>
+                <option value="pending" <?= ($adminClient['status'] ?? '') === 'pending' ? 'selected' : '' ?>>Pending</option>
+                <option value="expired" <?= ($adminClient['status'] ?? '') === 'expired' ? 'selected' : '' ?>>Expired</option>
+            </select>
+            <input type="datetime-local" name="expires_at" value="<?= e(datetime_local_value($adminClient['expires_at'] ?? null)) ?>" class="w-full bg-slate-950/50 border-white/5 rounded-2xl p-5 text-white text-xs font-bold tracking-widest">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-600">Leave password empty to keep the existing password hash unchanged.</p>
+            <div class="flex justify-end space-x-6 pt-6"><button type="button" onclick="this.closest('[id^=modal-client]').classList.add('hidden')" class="text-slate-600 font-black uppercase text-[10px] tracking-widest">Cancel</button>
+            <button class="bg-emerald-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[10px] shadow-xl">Save Client</button></div>
+        </div>
+    </form>
+</div>
+<?php endforeach; ?>
 
 <footer class="text-center py-32 text-[10px] font-black text-slate-800 uppercase tracking-[1em]">Shield Infrastructure &bull; Version 5.0 Core</footer>
 </body></html>

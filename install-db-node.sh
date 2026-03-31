@@ -164,6 +164,13 @@ Alias /${PMA_ALIAS} /usr/share/phpmyadmin
     Require all granted
 </Directory>
 APACHE
+  mkdir -p /etc/phpmyadmin/conf.d
+  cat >/etc/phpmyadmin/conf.d/90-db-platform.php <<'PMACONF'
+<?php
+if (isset($i) && is_int($i)) {
+    $cfg['Servers'][$i]['hide_db'] = '^(information_schema|performance_schema|mysql|sys)$';
+}
+PMACONF
   a2enconf phpmyadmin >/dev/null 2>&1 || true
 }
 
@@ -178,6 +185,7 @@ const API_KEY = '__API_KEY__';
 const PROV_USER = '__PROV_USER__';
 const PROV_PASS = '__PROV_PASS__';
 const BACKUP_DIR = '/var/backups/mariadb';
+const BACKUP_SCRIPT = '/usr/local/sbin/db-platform-backup.sh';
 const BACKUP_KEY = '__BACKUP_KEY__';
 
 if (($_GET['key'] ?? '') !== API_KEY) { http_response_code(403); die('Forbidden'); }
@@ -214,6 +222,26 @@ function drop_remote_user_hosts(PDO $pdo, string $user): void {
     foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $host) {
         $pdo->exec("DROP USER IF EXISTS " . quoted_user_host($pdo, $user, (string)$host));
     }
+}
+function queue_backup_job(array $dbNames = []): array {
+    if (!is_executable(BACKUP_SCRIPT)) throw new RuntimeException('Backup engine is not installed.');
+    $cleanNames = [];
+    foreach ($dbNames as $dbName) {
+        $cleanNames[] = ensure_identifier((string)$dbName, 'Database name');
+    }
+    $cleanNames = array_values(array_unique($cleanNames));
+    $label = $cleanNames
+        ? preg_replace('/[^A-Za-z0-9._-]+/', '-', implode('-', array_slice($cleanNames, 0, 3)))
+        : 'node-full';
+    $stamp = date('Ymd-His');
+    $file = BACKUP_DIR . '/' . ($label ?: 'snapshot') . '-' . $stamp . '.sql.gz.enc';
+    $command = 'nohup env BACKUP_FILE=' . escapeshellarg($file) . ' ' . escapeshellarg(BACKUP_SCRIPT);
+    foreach ($cleanNames as $dbName) {
+        $command .= ' ' . escapeshellarg($dbName);
+    }
+    $command .= ' >/dev/null 2>&1 & echo $!';
+    $pid = trim((string)shell_exec($command));
+    return ['file' => basename($file), 'path' => $file, 'pid' => $pid];
 }
 
 $action = $_GET['action'] ?? 'stats';
@@ -272,16 +300,20 @@ try {
         $pdo->exec("FLUSH PRIVILEGES");
         $res = ['message' => "IP Whitelist Synchronized."];
     } elseif ($action === 'trigger_backup') {
-        $dbName = trim((string)($_POST['db_name'] ?? ''));
-        $stamp = date('Ymd-His');
-        $file = BACKUP_DIR . "/snapshot-$stamp.sql.gz.enc";
-        if (!is_dir(BACKUP_DIR)) mkdir(BACKUP_DIR, 0700, true);
-        $dumpCmd = $dbName !== ''
-            ? "mariadb-dump --databases " . escapeshellarg(ensure_identifier($dbName, 'Database name')) . " --single-transaction --quick --routines --events"
-            : "mariadb-dump --all-databases --single-transaction --quick --routines --events";
-        shell_exec($dumpCmd . " | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass " . escapeshellarg('pass:' . BACKUP_KEY) . " -out " . escapeshellarg($file));
-        @shell_exec("rclone sync " . escapeshellarg(BACKUP_DIR) . " remote:backup --config /root/.rclone.conf");
-        $res = ['message' => "Point-in-time snapshot created."];
+        $dbNames = [];
+        $singleDbName = trim((string)($_POST['db_name'] ?? ''));
+        if ($singleDbName !== '') $dbNames[] = $singleDbName;
+        $multiDbNames = $_POST['db_names'] ?? null;
+        if ($multiDbNames !== null) {
+            $decoded = json_decode((string)$multiDbNames, true);
+            if (!is_array($decoded)) throw new InvalidArgumentException('Database list is invalid.');
+            foreach ($decoded as $dbName) $dbNames[] = (string)$dbName;
+        }
+        $backup = queue_backup_job($dbNames);
+        if (count($dbNames) === 1) $message = 'Backup queued for ' . ensure_identifier($dbNames[0], 'Database name') . '.';
+        elseif ($dbNames) $message = 'Backup queued for ' . count(array_unique($dbNames)) . ' databases.';
+        else $message = 'Full-node backup queued.';
+        $res = ['message' => $message, 'file' => $backup['file'], 'path' => $backup['path'], 'pid' => $backup['pid']];
     } elseif ($action === 'create') {
         $prefix = ensure_identifier((string)($_POST['db_prefix'] ?? ''), 'Database prefix');
         $suffix = ensure_identifier((string)($_POST['db_suffix'] ?? ''), 'Database suffix');
@@ -350,8 +382,14 @@ write_backup_script() {
 #!/usr/bin/env bash
 set -euo pipefail
 BACKUP_DIR="/var/backups/mariadb"
-STAMP="\$(date +%F-%H%M%S)"
-mariadb-dump --all-databases --single-transaction --quick --routines --events | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:${MASTER_BACKUP_KEY} -out "\$BACKUP_DIR/auto-\$STAMP.sql.gz.enc"
+STAMP="\${BACKUP_STAMP:-\$(date +%F-%H%M%S)}"
+OUT_FILE="\${BACKUP_FILE:-\$BACKUP_DIR/auto-\$STAMP.sql.gz.enc}"
+mkdir -p "\$BACKUP_DIR"
+if [ "\$#" -gt 0 ]; then
+  mariadb-dump --single-transaction --quick --routines --events --databases "\$@" | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:${MASTER_BACKUP_KEY} -out "\$OUT_FILE"
+else
+  mariadb-dump --all-databases --single-transaction --quick --routines --events | gzip | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:${MASTER_BACKUP_KEY} -out "\$OUT_FILE"
+fi
 if [ -f /root/.rclone.conf ]; then rclone sync "\$BACKUP_DIR" remote:backup --config /root/.rclone.conf; fi
 find "\$BACKUP_DIR" -type f -name '*.enc' -mtime +30 -delete
 BACKUP
@@ -368,6 +406,7 @@ Backup Key: ${MASTER_BACKUP_KEY}
 Provisioner: ${PROVISIONER_DB_USER}
 Agent Path Restriction: ${HUB_IP}
 phpMyAdmin Alias: ${PMA_ALIAS}
+Backup Directory: /var/backups/mariadb
 EOF
   echo -e "\n${CLR_BOLD}${CLR_GREEN}Enterprise Node Online!${RESET:-}"
 }

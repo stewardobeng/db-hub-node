@@ -1,99 +1,167 @@
 # DB Hub & Node Platform
 
-DB Hub & Node is a self-hosted multi-tenant MariaDB platform built around two install targets:
+DB-Shield is a self-hosted multi-tenant MariaDB control plane built from two installers:
 
-- `install-db-hub.sh`: deploys the central Hub dashboard.
-- `install-db-node.sh`: deploys a database Node with the agent API, MariaDB, phpMyAdmin, and backups.
+- `install-db-hub.sh`: deploys the Hub dashboard.
+- `install-db-node.sh`: deploys a database Node with the agent API, MariaDB, phpMyAdmin, and backup jobs.
 
-The Hub provisions tenant databases on connected Nodes, enforces package quotas, tracks tenant usage, and manages IP whitelists from one place.
+The Hub manages tenants and Nodes. Each Node runs the actual MariaDB workloads.
 
-## What The Platform Does
+## What The Current Build Does
 
-- Central Hub dashboard built with PHP and SQLite.
-- Node agent API for provisioning, usage reporting, IP whitelist updates, backups, tenant deletion, and password rotation.
-- Package-based limits for database count, storage quota, and max connections.
-- Optional Paystack billing and SMTP notifications.
-- Daily encrypted node backups with optional `rclone` sync.
-- Scope-aware uninstaller for `hub`, `node`, or `all`.
+- Admin Node add, edit, delete, health check, and full-node backup from the Hub UI.
+- Admin tenant create, edit, delete, provision, and tenant backup from the Hub UI.
+- Client signup, login, self-service database provisioning, IP whitelist management, and per-database backup from the client UI.
+- Downloaded tenant `.env` files now include `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD`.
+- phpMyAdmin is exposed per Node, and system schemas are hidden from the phpMyAdmin navigation tree.
+- Automatic encrypted daily Node backups with optional `rclone` sync.
+- Scope-aware uninstall for `hub`, `node`, or `all`.
 
 ## Architecture
 
-1. The Hub stores package, tenant, and server metadata in SQLite.
-2. Each Node exposes `/agent-api/agent.php` and accepts authenticated requests only from `localhost` and the configured Hub IP.
-3. The Hub selects an online Node, provisions tenant credentials, then shows the generated `.env` file and phpMyAdmin link to the tenant.
+1. The Hub stores platform metadata in SQLite at `/var/www/db-hub/hub_v5.sqlite`.
+2. Each Node exposes `/agent-api/agent.php` plus a phpMyAdmin alias.
+3. The Hub chooses a healthy Node, provisions the tenant database, stores the mapping, and offers a ready-to-use `.env` file.
+4. Backup requests from the Hub UI queue encrypted dump jobs on the Node and write output to `/var/backups/mariadb`.
 
-## Requirements
+## Server Requirements
 
 - Ubuntu 22.04 or 24.04 on the target servers.
 - Root or `sudo` access.
-- A public FQDN for the Hub.
-- A public URL and fixed Hub IP for each Node.
+- A stable public hostname for the Hub.
+- A public hostname or IP for each Node.
 - Optional:
   - Paystack secret key for paid plans.
   - SMTP credentials for alerts and notifications.
-  - `rclone` remote configuration for off-server backup sync.
+  - `rclone` config at `/root/.rclone.conf` for off-server backup sync.
 
 ## Install The Hub
-
-Run on the management server:
 
 ```bash
 chmod +x install-db-hub.sh
 sudo ./install-db-hub.sh
 ```
 
-During setup the installer will prompt for:
+The Hub installer writes `/root/db-hub-install-summary.txt`.
 
-- Hub FQDN and Apache alias
-- admin email
-- optional Paystack settings
-- optional SMTP settings
+Important fields in that summary:
 
-The installer writes a summary file to `/root/db-hub-install-summary.txt`.
+- `Access`: Hub login URL.
+- `Admin Identity`: initial Hub admin username.
+- `Access Key`: initial Hub admin password.
 
 ## Install A Node
-
-Run on each database server:
 
 ```bash
 chmod +x install-db-node.sh
 sudo ./install-db-node.sh
 ```
 
-During setup the installer will prompt for:
+The Node installer writes `/root/db-node-install-summary.txt`.
 
-- Node FQDN
-- public URL
-- Hub IP
-- phpMyAdmin alias
+Important fields in that summary:
 
-The installer writes a summary file to `/root/db-node-install-summary.txt` containing the agent API key, provisioner credentials, backup key, and access details.
+- `Agent Key`: use this when registering the Node in the Hub.
+- `Backup Key`: use this to decrypt backup files during restore.
+- `Provisioner`: internal MariaDB service account used by the Node agent.
+- `Agent Path Restriction`: the allowed Hub IP or `any`.
+- `phpMyAdmin Alias`: the alias used in the Node URL.
+- `Backup Directory`: local path where encrypted backups are written.
 
 ## Connect A Node To The Hub
 
-1. Log in to the Hub as the platform administrator.
-2. Open the admin dashboard and add a server.
-3. Enter:
-   - a display name
-   - the Node host or IP
-   - the Node public URL
-   - the Node agent API key
-   - the phpMyAdmin alias configured on that Node
+In the Hub admin UI, fill the Node form like this:
 
-Once saved, the Hub can use that Node for health checks, provisioning, backup triggers, and whitelist updates.
+- `Name`: any display label you want.
+- `Database Host / IP`: the MariaDB host that should be written into downloaded tenant `.env` files. Use `host:port` if you need a non-default MariaDB port.
+- `Public Endpoint`: the Node base URL only, for example `http://dbnode.example.com`. Do not include `/agent-api/agent.php`.
+- `Agent Access Token`: the `Agent Key` from `/root/db-node-install-summary.txt`.
+- `phpMyAdmin Alias`: the value from `/root/db-node-install-summary.txt`, usually `phpmyadmin`.
 
-## Tenant Flow
+Notes:
 
-1. Create packages in the Hub or use the seeded defaults.
-2. A client signs up for a package.
-3. If billing is disabled or the package price is `0`, the account activates immediately.
-4. If billing is enabled, the client is sent through Paystack and is activated by webhook after a successful charge.
-5. The client provisions databases from the dashboard until their package limit is reached.
-6. The Hub syncs usage from the Node and blocks provisioning when the storage quota is exhausted.
+- The Hub uses `Public Endpoint` for health checks and agent calls.
+- The tenant `.env` uses `Database Host / IP` first. If you leave it blank in a future customization, the Hub falls back to the endpoint hostname and port `3306`.
+
+## Admin Workflow
+
+From the Hub admin UI you can:
+
+- Link, edit, back up, and remove Nodes.
+- Create, edit, provision, back up, and remove tenant accounts.
+- Download the latest generated tenant `.env` file after an admin-side provision.
+
+Deletion safeguards:
+
+- A Node cannot be removed while tenant databases are still attached to it.
+- A tenant cannot be removed while it still owns provisioned databases.
+
+## Client Workflow
+
+Clients can:
+
+- Sign up or log in.
+- Provision databases until their package limit is reached.
+- Download the generated `.env` file.
+- Open phpMyAdmin on the assigned Node.
+- Change allowed database client IPs.
+- Trigger a backup for an individual database.
+
+## Backups
+
+There are three backup paths:
+
+- Automatic Node backup:
+  - Daily at `02:00` local Node time.
+  - Dumps all databases on the Node.
+- Admin tenant backup:
+  - From the Hub tenant table.
+  - Queues backups for every database owned by that tenant.
+- Client database backup:
+  - From the client dashboard.
+  - Queues a backup for that single database.
+
+Admin full-node backup is also available from the Node table in the Hub UI.
+
+All UI-triggered backups:
+
+- queue an encrypted dump job on the target Node,
+- write the output to `/var/backups/mariadb`,
+- and sync via `rclone` if `/root/.rclone.conf` exists.
+
+## Restore A Backup
+
+You need:
+
+- the `.sql.gz.enc` backup file,
+- the Node `Backup Key` from `/root/db-node-install-summary.txt`,
+- and a MariaDB server to restore into.
+
+Basic restore command:
+
+```bash
+openssl enc -d -aes-256-cbc -pbkdf2 -pass pass:YOUR_BACKUP_KEY -in /var/backups/mariadb/your-backup.sql.gz.enc | gunzip | mariadb
+```
+
+Recommended restore flow:
+
+1. Provision a fresh Node or use the original Node.
+2. Copy the encrypted backup file onto that server.
+3. Confirm MariaDB is running.
+4. Run the restore command above with the correct `Backup Key`.
+5. Reconnect the Node to the Hub if you rebuilt it from scratch.
+
+If you restore onto a brand-new Node, also reapply any DNS, firewall, or Hub registration details that existed before the failure.
+
+## Operational Notes
+
+- Hub watchdog checks run every 10 minutes.
+- The Hub seeds default packages if none exist.
+- Node backups are retained locally for 30 days.
+- phpMyAdmin hides `information_schema`, `performance_schema`, `mysql`, and `sys` from the navigation tree.
+- MariaDB still uses those internal schemas under the hood; the hide rule is for UI clarity, not a database-engine change.
 
 ## Uninstall
-
-The uninstaller now supports targeted cleanup:
 
 ```bash
 sudo ./uninstall-db-platform.sh hub
@@ -101,7 +169,7 @@ sudo ./uninstall-db-platform.sh node
 sudo ./uninstall-db-platform.sh all
 ```
 
-You can also pre-answer package purge prompts:
+Optional package purge:
 
 ```bash
 sudo PURGE_PACKAGES=yes ./uninstall-db-platform.sh node
@@ -110,26 +178,9 @@ sudo PURGE_PACKAGES=yes ./uninstall-db-platform.sh all
 
 Behavior:
 
-- `hub`: removes the Hub app, SQLite data, hub cron job, Apache config, and legacy hub leftovers.
-- `node`: removes the Node agent, MariaDB data/config, backup jobs, phpMyAdmin config, and node leftovers.
-- `all`: removes both sides and can purge the shared Apache/PHP stack for a full wipe.
-
-The script automatically detects whether the other platform component is still present before deciding whether the shared web stack should also be removed.
-
-## Operational Notes
-
-- Hub watchdog checks run every 10 minutes by cron.
-- Node backups run daily at `02:00`.
-- The generated Hub app seeds default packages if none exist.
-- The generated Node agent validates tenant identifiers and host whitelist values before applying changes.
-- Summary files in `/root/` are the primary place to retrieve generated credentials after installation.
-
-## Security Notes
-
-- Review generated credentials immediately after installation.
-- Restrict Node exposure further at the cloud firewall or network layer when possible.
-- Keep summary files and backup keys in a secure secrets store.
-- If you enable billing or email, use real production credentials before going live.
+- `hub`: removes the Hub app, SQLite data, Hub cron job, Apache config, and Hub leftovers.
+- `node`: removes the Node agent, MariaDB data/config, backup jobs, phpMyAdmin config, and Node leftovers.
+- `all`: removes both sides and can purge shared packages for a full wipe.
 
 ## Repository Layout
 
