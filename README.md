@@ -20,25 +20,25 @@ The Hub manages tenants and Nodes. Each Node runs the actual MariaDB workloads.
 
 ## UI Source Of Truth
 
-The current Hub UI is no longer maintained only as a large inline heredoc.
+The runtime source of truth now lives in normal PHP app directories.
 
-- `templates/hub-index.php`: primary Hub runtime template copied into `/var/www/db-hub/index.php` during install.
-- `templates/hub-view.php`: supporting Hub view template copied into `/var/www/db-hub/hub-view.php` during install.
+- `app/hub/`: repo-backed Hub application deployed by `install-db-hub.sh`
+- `app/node/`: repo-backed Node agent application deployed by `install-db-node.sh`
 - `stitch/`: designer-delivered HTML screens, screenshots, and design references for every major page and feature.
 - `uidesign.md`: the product-facing screen and information architecture brief.
 
-Current Hub install behavior:
+Current install behavior:
 
-1. `install-db-hub.sh` still contains a fallback PHP heredoc for the Hub runtime.
-2. If `templates/hub-index.php` and `templates/hub-view.php` exist beside the installer, the installer copies those files into the deployed Hub and uses them as the shipped UI.
-3. After copy, the installer injects environment-specific values such as the admin credentials.
+1. `install-db-hub.sh` copies `app/hub/` into `/var/www/db-hub`, writes `/var/www/db-hub/.env`, and serves `/var/www/db-hub/public`.
+2. `install-db-node.sh` copies `app/node/` into `/var/www/db-agent`, writes `/var/www/db-agent/.env`, and serves `/var/www/db-agent/public` behind `/agent-api`.
+3. The installers still own OS-level concerns such as Apache, MariaDB, Certbot, phpMyAdmin, cron, firewall rules, and backup directories.
 
-If you want to change the live Hub UI, update the files in `templates/` first. Treat `stitch/` as the visual design reference, not the deployed runtime itself.
+If you want to change the live runtime, edit the files under `app/`. Treat `stitch/` as the visual design reference, not the deployed runtime itself.
 
 ## Architecture
 
-1. The Hub stores platform metadata in SQLite at `/var/www/db-hub/hub_v5.sqlite`.
-2. Each Node exposes `/agent-api/agent.php` plus a phpMyAdmin alias.
+1. The Hub app lives at `/var/www/db-hub`, serves from `/var/www/db-hub/public`, and stores metadata in SQLite at `/var/www/db-hub/storage/hub_v5.sqlite`.
+2. Each Node app lives at `/var/www/db-agent`, serves from `/var/www/db-agent/public`, exposes `/agent-api/agent.php`, and publishes a phpMyAdmin alias.
 3. The Hub chooses a healthy Node, provisions the tenant database, stores the mapping, and offers a ready-to-use `.env` file.
 4. Backup requests from the Hub UI queue encrypted dump jobs on the Node and write output to `/var/backups/mariadb`.
 
@@ -52,6 +52,33 @@ If you want to change the live Hub UI, update the files in `templates/` first. T
   - Paystack secret key for paid plans.
   - SMTP credentials for alerts and notifications.
   - `rclone` config at `/root/.rclone.conf` for off-server backup sync.
+
+## Run Locally
+
+The Hub and Node now run as normal PHP applications from this repository, so you can preview and edit them before deployment.
+
+### XAMPP quick preview
+
+1. Keep the repo under `D:\xampp\htdocs\db-platform-package`.
+2. Copy `app/hub/.env.example` to `app/hub/.env`.
+3. Copy `app/node/.env.example` to `app/node/.env`.
+4. Set a real admin password hash for the Hub:
+
+```bash
+D:\xampp\php\php.exe -r "echo password_hash('ChangeMe123!', PASSWORD_DEFAULT), PHP_EOL;"
+```
+
+5. Put that hash into `app/hub/.env` as `ADMIN_HASH=...`.
+6. Open the Hub locally at `http://localhost/db-platform-package/app/hub/public/`.
+7. Test the Node agent locally at `http://localhost/db-platform-package/app/node/public/agent.php?action=stats&key=YOUR_API_KEY`.
+
+Local notes:
+
+- The Hub uses SQLite locally by default through `app/hub/storage/hub_v5.sqlite`.
+- The Node expects MariaDB credentials in `app/node/.env`.
+- Backup UI can be previewed locally, but the full backup engine still depends on Linux-side dump tooling and cron when you deploy to a real Node.
+
+For the exact local file layout and URL examples, see [LOCAL-DEVELOPMENT.md](/D:/xampp/htdocs/db-platform-package/LOCAL-DEVELOPMENT.md).
 
 ## Install The Hub
 
@@ -247,7 +274,9 @@ Notes:
 - [install-db-hub.sh](./install-db-hub.sh)
 - [install-db-node.sh](./install-db-node.sh)
 - [uninstall-db-platform.sh](./uninstall-db-platform.sh)
+- [`app/hub/`](./app/hub)
+- [`app/node/`](./app/node)
 - [DOCUMENTATION.md](./DOCUMENTATION.md)
+- [LOCAL-DEVELOPMENT.md](./LOCAL-DEVELOPMENT.md)
 - [uidesign.md](./uidesign.md)
-- [`templates/`](./templates)
 - [`stitch/`](./stitch)

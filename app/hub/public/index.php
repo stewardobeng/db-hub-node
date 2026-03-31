@@ -1,19 +1,9 @@
 <?php
 declare(strict_types=1);
-session_start();
 
-const ADMIN_USER = '__HUB_USER__';
-const ADMIN_HASH = '__HUB_HASH__';
-const ADMIN_EMAIL = '__ADMIN_EMAIL__';
-const APP_SECRET = '__CSRF_SECRET__';
-const PAYSTACK_SECRET = '__PAYSTACK_SECRET__';
-const PAYSTACK_CURRENCY = '__PAYSTACK_CURRENCY__';
-const HUB_DB = 'hub_v5.sqlite';
-const SMTP_HOST = '__SMTP_HOST__';
-const SMTP_PORT = '__SMTP_PORT__';
-const SMTP_USER = '__SMTP_USER__';
-const SMTP_PASS = '__SMTP_PASS__';
-const SMTP_FROM = '__SMTP_FROM__';
+require dirname(__DIR__) . DIRECTORY_SEPARATOR . 'bootstrap.php';
+
+session_start();
 
 header("X-Frame-Options: DENY");
 header("X-Content-Type-Options: nosniff");
@@ -143,7 +133,7 @@ function hub_db(): PDO {
     if ($pdo instanceof PDO) {
         return $pdo;
     }
-    $pdo = new PDO('sqlite:' . __DIR__ . DIRECTORY_SEPARATOR . HUB_DB);
+    $pdo = new PDO('sqlite:' . HUB_DB_PATH);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->exec("CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, host TEXT, agent_key TEXT, public_url TEXT, pma_alias TEXT DEFAULT 'phpmyadmin', last_seen DATETIME, s3_endpoint TEXT, s3_bucket TEXT, s3_access_key TEXT, s3_secret_key TEXT)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS packages (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, price REAL, db_limit INTEGER, disk_quota_gb INTEGER DEFAULT 1, max_conns INTEGER DEFAULT 10, duration_days INTEGER DEFAULT 30)");
