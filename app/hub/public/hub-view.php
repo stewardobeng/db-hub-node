@@ -78,10 +78,7 @@ body { font-family: 'Inter', sans-serif; }
                     <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-on-primary shadow-[0_28px_80px_-40px_rgba(17,48,105,0.28)]">
                         <span class="material-symbols-outlined text-lg">shield</span>
                     </span>
-                    <span>
-                        <span class="block font-headline text-xl font-extrabold tracking-tight">CloudDB</span>
-                        <span class="block text-[10px] font-bold uppercase tracking-[0.24em] text-on-surface-variant">Infrastructure</span>
-                    </span>
+                    <span class="block font-headline text-xl font-extrabold tracking-tight">CloudDB</span>
                 </a>
                 <div class="flex items-center gap-3">
                     <a href="<?= e(page_url('login')) ?>" class="<?= $buttonGhost ?>">Sign in</a>
@@ -91,79 +88,70 @@ body { font-family: 'Inter', sans-serif; }
         </nav>
 
         <main>
-            <section class="grid-fade overflow-hidden px-6 pb-24 pt-20 lg:px-8">
-                <div class="mx-auto grid max-w-7xl gap-16 lg:grid-cols-[1.15fr,0.85fr] lg:items-center">
-                    <div>
-                        <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-outline-variant/20 bg-primary-container/45 px-4 py-2">
-                            <span class="h-2 w-2 rounded-full bg-tertiary"></span>
-                            <span class="text-xs font-semibold uppercase tracking-[0.22em] text-on-primary-container">Hub and node orchestration</span>
-                        </div>
+            <section class="relative isolate overflow-hidden">
+                <div class="absolute inset-0">
+                    <img src="assets/images/hero-server-room.jpg" alt="Server room infrastructure" class="h-full w-full object-cover">
+                    <div class="absolute inset-0 bg-[linear-gradient(115deg,rgba(4,11,24,0.94)_0%,rgba(6,16,33,0.84)_44%,rgba(6,16,33,0.62)_72%,rgba(6,16,33,0.82)_100%)]"></div>
+                    <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,83,219,0.28),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(0,109,74,0.2),transparent_28%)]"></div>
+                </div>
+                <div class="relative mx-auto flex min-h-[calc(100vh-81px)] max-w-7xl items-center justify-center px-6 py-16 lg:px-8">
+                    <div class="w-full max-w-5xl text-center">
                         <div class="max-w-3xl space-y-4">
                             <?= render_alert($message, 'message') ?>
                             <?= render_alert($error, 'error') ?>
                         </div>
-                        <h1 class="mt-8 max-w-4xl font-headline text-5xl font-extrabold leading-tight tracking-tight text-on-surface sm:text-6xl lg:text-7xl">
+                        <h1 class="mx-auto mt-8 max-w-5xl font-headline text-6xl font-extrabold leading-tight tracking-tight text-white sm:text-7xl lg:text-[5.8rem]">
                             Architectural control for
-                            <span class="text-primary">multi-node MariaDB</span>
+                            <span class="text-primary-container">multi-node MariaDB</span>
                             infrastructure.
                         </h1>
-                        <p class="mt-6 max-w-2xl text-lg leading-8 text-on-surface-variant">
+                        <p class="mx-auto mt-6 max-w-2xl text-lg leading-8 text-white">
                             Provision tenant databases across managed nodes, automate backups, issue connection files, and keep access policies visible from one calm control plane.
                         </p>
-                        <div class="mt-10 flex flex-wrap gap-4">
-                            <a href="#plans" class="<?= $buttonPrimary ?>">Start provisioning</a>
-                            <a href="<?= e(page_url('login')) ?>" class="<?= $buttonSecondary ?>">Open console</a>
-                        </div>
-                        <div class="mt-14 grid gap-5 sm:grid-cols-3">
-                            <div class="<?= $panel ?> p-5"><p class="text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant">Nodes online</p><p class="mt-3 font-headline text-4xl font-extrabold"><?= count($servers) ?></p></div>
-                            <div class="<?= $panel ?> p-5"><p class="text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant">Plans available</p><p class="mt-3 font-headline text-4xl font-extrabold"><?= count($packages) ?></p></div>
-                            <div class="<?= $panel ?> p-5"><p class="text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant">Backups ready</p><p class="mt-3 font-headline text-4xl font-extrabold"><?= $backupStats['queued'] + $backupStats['completed'] ?></p></div>
-                        </div>
-                    </div>
-                    <div class="<?= $panel ?> p-6 lg:p-8">
-                        <div class="rounded-[1.6rem] bg-on-surface p-6 text-white shadow-[0_28px_80px_-40px_rgba(17,48,105,0.28)]">
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <p class="text-[11px] uppercase tracking-[0.22em] text-white/60">Operations frame</p>
-                                    <h2 class="mt-2 font-headline text-2xl font-extrabold">Silent Sentinel</h2>
-                                </div>
-                                <span class="rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em]">Healthy</span>
-                            </div>
-                            <div class="mt-8 grid gap-4 sm:grid-cols-2">
-                                <div class="rounded-2xl bg-white/10 p-5">
-                                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-white/55">Managed assets</p>
-                                    <p class="mt-3 text-3xl font-extrabold"><?= (int)($db->query("SELECT COUNT(*) FROM tenant_dbs")->fetchColumn() ?: 0) ?></p>
-                                    <p class="mt-2 text-sm text-white/70">Provisioned tenant databases across your registered nodes.</p>
-                                </div>
-                                <div class="rounded-2xl bg-white/10 p-5">
-                                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-white/55">Storage tracked</p>
-                                    <p class="mt-3 text-3xl font-extrabold"><?= e(format_storage_mb($totalStorageMb)) ?></p>
-                                    <p class="mt-2 text-sm text-white/70">Usage synced from node inventory and presented per tenant.</p>
-                                </div>
-                            </div>
-                            <div class="mt-6 rounded-2xl bg-white/8 p-5">
-                                <div class="flex items-center justify-between text-sm text-white/70">
-                                    <span>Platform coverage</span>
-                                    <span><?= $serverTotals['healthy'] ?> healthy / <?= count($servers) ?> total nodes</span>
-                                </div>
-                                <div class="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
-                                    <div class="h-full bg-primary" style="width: <?= count($servers) > 0 ? (int)round(($serverTotals['healthy'] / count($servers)) * 100) : 0 ?>%"></div>
-                                </div>
-                            </div>
-                            <div class="mt-8 grid gap-3">
-                                <div class="flex items-center justify-between rounded-2xl bg-white/10 px-4 py-3"><div class="flex items-center gap-3"><span class="material-symbols-outlined text-primary-container">dns</span><span class="text-sm font-semibold">Node-aware provisioning</span></div><span class="text-xs text-white/55">Best-node selection</span></div>
-                                <div class="flex items-center justify-between rounded-2xl bg-white/10 px-4 py-3"><div class="flex items-center gap-3"><span class="material-symbols-outlined text-primary-container">backup</span><span class="text-sm font-semibold">Backup orchestration</span></div><span class="text-xs text-white/55">Node, tenant, and database scope</span></div>
-                                <div class="flex items-center justify-between rounded-2xl bg-white/10 px-4 py-3"><div class="flex items-center gap-3"><span class="material-symbols-outlined text-primary-container">shield_person</span><span class="text-sm font-semibold">Access allowlists</span></div><span class="text-xs text-white/55">Per database policy sync</span></div>
-                            </div>
+                        <div class="mt-10 flex flex-wrap justify-center gap-4">
+                            <a href="#plans" class="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-950 shadow-[0_22px_55px_-28px_rgba(255,255,255,0.55)] transition hover:bg-slate-100">Start provisioning</a>
+                            <a href="<?= e(page_url('login')) ?>" class="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/16">Open console</a>
                         </div>
                     </div>
                 </div>
             </section>
-            <section class="border-y border-outline-variant/10 bg-surface-container-low px-6 py-14 lg:px-8">
-                <div class="mx-auto grid max-w-7xl gap-8 md:grid-cols-4">
-                    <?php foreach ([['dns', 'Multi-node provisioning', 'Route new tenant databases to the healthiest registered node.'], ['backup', 'Backup automation', 'Request full-node, tenant, or single-database backups from the hub.'], ['terminal', 'Native phpMyAdmin', 'Open the node phpMyAdmin console directly from each asset card.'], ['history', 'Operational visibility', 'Audit actions, provisioning events, and connection changes in one feed.']] as $feature): ?>
-                        <div class="<?= $panel ?> p-6"><span class="material-symbols-outlined text-3xl text-primary"><?= e($feature[0]) ?></span><h3 class="mt-4 font-headline text-lg font-bold"><?= e($feature[1]) ?></h3><p class="mt-2 text-sm leading-6 text-on-surface-variant"><?= e($feature[2]) ?></p></div>
-                    <?php endforeach; ?>
+            <section class="bg-[linear-gradient(180deg,#f8fbff_0%,#eef4ff_100%)] px-6 py-24 text-on-surface lg:px-8">
+                <div class="mx-auto max-w-7xl">
+                    <div class="mx-auto max-w-3xl text-center">
+                        <p class="text-xs font-bold uppercase tracking-[0.28em] text-primary">Platform capabilities</p>
+                        <h2 class="mt-4 font-headline text-4xl font-extrabold tracking-tight sm:text-5xl">Purpose-built workflows for CloudDB operations.</h2>
+                        <p class="mt-5 text-base leading-7 text-on-surface-variant">Every core action is organized around a controlled, visual workflow: onboarding nodes, protecting tenant data, moving into phpMyAdmin, and keeping operational visibility readable at a glance.</p>
+                    </div>
+                    <div class="mt-14 grid gap-8 md:grid-cols-2 xl:grid-cols-4">
+                        <?php foreach ([
+                            ['icon' => 'dns', 'title' => 'Multi-node provisioning', 'description' => 'Route new tenant databases to the healthiest registered node with a layout built for fleet-level decision making.', 'image' => 'assets/images/feature-nodes.jpg', 'eyebrow' => 'Node placement'],
+                            ['icon' => 'backup', 'title' => 'Backup automation', 'description' => 'Queue full-node, tenant, or single-database backups with an operations-first view of protection and recovery.', 'image' => 'assets/images/feature-backups.jpg', 'eyebrow' => 'Recovery posture'],
+                            ['icon' => 'terminal', 'title' => 'Native phpMyAdmin', 'description' => 'Hand users a direct console path into their assigned database environment without losing context from the control plane.', 'image' => 'assets/images/feature-console.jpg', 'eyebrow' => 'Console access'],
+                            ['icon' => 'history', 'title' => 'Operational visibility', 'description' => 'Track provisioning, backups, credential changes, and node health through a calmer and more legible activity layer.', 'image' => 'assets/images/feature-visibility.jpg', 'eyebrow' => 'Audit surface'],
+                        ] as $feature): ?>
+                        <article class="overflow-hidden rounded-[1.9rem] border border-outline-variant/15 bg-white shadow-[0_32px_90px_-60px_rgba(17,48,105,0.28)]">
+                            <div class="relative aspect-[4/3] overflow-hidden">
+                                <img src="<?= e($feature['image']) ?>" alt="<?= e($feature['title']) ?>" class="h-full w-full object-cover transition duration-500 hover:scale-105">
+                                <div class="absolute inset-0 bg-[linear-gradient(180deg,rgba(8,20,39,0.04)_0%,rgba(8,20,39,0.58)_100%)]"></div>
+                                <div class="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full border border-white/18 bg-slate-950/52 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.22em] text-white backdrop-blur-md">
+                                    <span class="material-symbols-outlined text-base text-white"><?= e($feature['icon']) ?></span>
+                                    <span><?= e($feature['eyebrow']) ?></span>
+                                </div>
+                            </div>
+                            <div class="p-6">
+                                <div class="flex items-start gap-3">
+                                    <span class="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
+                                        <span class="material-symbols-outlined text-xl"><?= e($feature['icon']) ?></span>
+                                    </span>
+                                    <div>
+                                        <h3 class="font-headline text-xl font-extrabold tracking-tight"><?= e($feature['title']) ?></h3>
+                                        <p class="mt-3 text-sm leading-7 text-on-surface-variant"><?= e($feature['description']) ?></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </article>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
             </section>
             <section id="plans" class="px-6 py-24 lg:px-8">
@@ -191,6 +179,48 @@ body { font-family: 'Inter', sans-serif; }
                     </div>
                 </div>
             </section>
+            <footer class="border-t border-outline-variant/10 bg-[#030814] px-6 pb-10 pt-20 text-white lg:px-8">
+                <div class="mx-auto max-w-7xl">
+                    <div class="grid gap-10 border-b border-white/8 pb-12 md:grid-cols-2 xl:grid-cols-4">
+                        <div>
+                            <div class="flex items-center gap-3">
+                                <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-on-primary shadow-[0_28px_80px_-40px_rgba(17,48,105,0.4)]"><span class="material-symbols-outlined">shield</span></span>
+                                <span class="font-headline text-2xl font-extrabold tracking-tight">CloudDB</span>
+                            </div>
+                            <p class="mt-5 max-w-sm text-sm leading-7 text-white/60">Self-hosted hub-and-node orchestration for tenant provisioning, controlled access, encrypted backups, and day-to-day database operations.</p>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-white/50">Platform</h3>
+                            <div class="mt-5 space-y-3 text-sm text-white/68">
+                                <a href="#plans" class="block transition hover:text-white">Service tiers</a>
+                                <a href="<?= e(page_url('login')) ?>" class="block transition hover:text-white">Hub console</a>
+                                <a href="<?= e(page_url('signup', ['pkg' => (int)($packages[0]['id'] ?? 1)])) ?>" class="block transition hover:text-white">Create tenant account</a>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-white/50">Workflows</h3>
+                            <div class="mt-5 space-y-3 text-sm text-white/68">
+                                <p>Node registration and health tracking</p>
+                                <p>Tenant database provisioning</p>
+                                <p>Backup and recovery operations</p>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-white/50">Access</h3>
+                            <div class="mt-5 space-y-3 text-sm text-white/68">
+                                <p>Hub-led control plane</p>
+                                <p>Node-backed MariaDB workloads</p>
+                                <p>phpMyAdmin and connection file delivery</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col gap-3 pt-8 text-sm text-white/45 md:flex-row md:items-center md:justify-between">
+                        <p>&copy; <?= date('Y') ?> CloudDB. Structured control for modern MariaDB operations.</p>
+                        <p>Hub control plane. Node execution layer. Encrypted backup posture.</p>
+                    </div>
+                </div>
+            </footer>
         </main>
     </div>
 
@@ -199,7 +229,7 @@ body { font-family: 'Inter', sans-serif; }
         <div class="<?= $panel ?> w-full max-w-md p-8 sm:p-10">
             <div class="mb-8 flex items-center gap-3">
                 <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-on-primary"><span class="material-symbols-outlined">lock</span></span>
-                <div><h1 class="font-headline text-2xl font-extrabold tracking-tight">Sign in</h1><p class="text-sm text-on-surface-variant">Use the admin username or a tenant email address.</p></div>
+                <div><h1 class="font-headline text-2xl font-extrabold tracking-tight">Sign in</h1></div>
             </div>
             <div class="space-y-3"><?= render_alert($message, 'message') ?><?= render_alert($error, 'error') ?></div>
             <form method="post" class="mt-8 space-y-5">
@@ -209,7 +239,7 @@ body { font-family: 'Inter', sans-serif; }
                 <div><label class="mb-2 block text-sm font-bold text-on-surface">Password</label><input class="<?= $input ?>" type="password" name="password" placeholder="Enter your password" required></div>
                 <button class="<?= $buttonPrimary ?> w-full">Unlock workspace</button>
             </form>
-            <div class="mt-6 flex items-center justify-between text-sm"><a href="<?= e(page_url('landing')) ?>" class="text-on-surface-variant hover:text-primary">Back to landing page</a><a href="<?= e(page_url('landing')) ?>#plans" class="text-primary hover:underline">Create an account</a></div>
+            <div class="mt-6 flex items-center justify-between text-sm"><a href="<?= e(page_url('landing')) ?>" class="text-on-surface-variant hover:text-primary">Back to home</a><a href="<?= e(page_url('landing')) ?>#plans" class="text-primary hover:underline">Create an account</a></div>
         </div>
     </div>
 
