@@ -316,6 +316,158 @@ function call_agent(array $server, array $params = []): array {
     return is_array($decoded) ? $decoded : ['error' => 'Invalid node response'];
 }
 
+function load_server_by_id(PDO $db, int $serverId): ?array {
+    $stmt = $db->prepare("SELECT * FROM servers WHERE id = ?");
+    $stmt->execute([$serverId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+}
+
+function backup_job_file_name(array $job): string {
+    $fileName = trim((string)($job['file_name'] ?? ''));
+    if ($fileName === '' && !empty($job['file_path'])) {
+        $fileName = basename((string)$job['file_path']);
+    }
+    $baseName = basename(str_replace('\\', '/', $fileName));
+    return preg_match('/^[A-Za-z0-9._-]+\.enc$/', $baseName) ? $baseName : '';
+}
+
+function backup_job_can_download(array $job): bool {
+    return ((string)($job['status'] ?? '')) === 'completed'
+        && backup_job_file_name($job) !== ''
+        && !empty($job['server_id']);
+}
+
+function backup_job_can_restore(array $job): bool {
+    if (!backup_job_can_download($job)) {
+        return false;
+    }
+    if (($job['scope'] ?? '') === 'node') {
+        return true;
+    }
+    return !empty($job['tdb_id']);
+}
+
+function sync_backup_job_status(PDO $db, array $job, ?array $server = null): array {
+    if ((string)($job['status'] ?? '') !== 'queued') {
+        return $job;
+    }
+    $fileName = backup_job_file_name($job);
+    if ($fileName === '' || empty($job['server_id'])) {
+        return $job;
+    }
+    $server ??= load_server_by_id($db, (int)$job['server_id']);
+    if (!$server) {
+        return $job;
+    }
+    $status = call_agent($server, ['action' => 'backup_status', 'file' => $fileName, 'timeout' => 8]);
+    if (!empty($status['exists'])) {
+        $filePath = (string)($status['path'] ?? $job['file_path'] ?? '');
+        $db->prepare("UPDATE backup_jobs SET status = 'completed', file_name = ?, file_path = ? WHERE id = ?")->execute([$fileName, $filePath, (int)$job['id']]);
+        $job['status'] = 'completed';
+        $job['file_name'] = $fileName;
+        $job['file_path'] = $filePath;
+    }
+    return $job;
+}
+
+function sync_backup_job_collection(PDO $db, array $jobs): array {
+    $serverCache = [];
+    foreach ($jobs as $index => $job) {
+        if ((string)($job['status'] ?? '') !== 'queued' || empty($job['server_id']) || backup_job_file_name($job) === '') {
+            continue;
+        }
+        $serverId = (int)$job['server_id'];
+        if (!array_key_exists($serverId, $serverCache)) {
+            $serverCache[$serverId] = load_server_by_id($db, $serverId);
+        }
+        $jobs[$index] = sync_backup_job_status($db, $job, $serverCache[$serverId] ?: null);
+    }
+    return $jobs;
+}
+
+function load_backup_job_for_actor(PDO $db, int $jobId, bool $isAdmin, ?int $clientId): ?array {
+    $sql = "SELECT b.*, s.name AS server_name, s.public_url, s.agent_key, c.email AS client_email, t.db_name AS tenant_db_name, t.db_user AS tenant_db_user, t.client_id AS tenant_owner_id
+            FROM backup_jobs b
+            LEFT JOIN servers s ON s.id = b.server_id
+            LEFT JOIN clients c ON c.id = b.client_id
+            LEFT JOIN tenant_dbs t ON t.id = b.tdb_id
+            WHERE b.id = ?";
+    $params = [$jobId];
+    if (!$isAdmin) {
+        $resolvedClientId = (int)($clientId ?? 0);
+        $sql .= " AND (b.client_id = ? OR b.requested_by_id = ? OR t.client_id = ?)";
+        array_push($params, $resolvedClientId, $resolvedClientId, $resolvedClientId);
+    }
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $job = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$job) {
+        return null;
+    }
+    $server = (!empty($job['public_url']) && !empty($job['agent_key'])) ? [
+        'public_url' => $job['public_url'],
+        'agent_key' => $job['agent_key'],
+    ] : null;
+    return sync_backup_job_status($db, $job, $server);
+}
+
+function fetch_agent_backup(array $server, string $fileName, int $timeout = 300): array {
+    if (empty($server['public_url']) || empty($server['agent_key'])) {
+        return ['error' => 'Node configuration is incomplete.'];
+    }
+    $temp = fopen('php://temp/maxmemory:5242880', 'w+');
+    if ($temp === false) {
+        return ['error' => 'Unable to allocate a temporary download stream.'];
+    }
+    $headers = [];
+    $url = rtrim((string)$server['public_url'], '/') . '/agent-api/agent.php?' . http_build_query([
+        'action' => 'download_backup',
+        'key' => $server['agent_key'],
+        'file' => $fileName,
+    ]);
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_FILE, $temp);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, max(30, $timeout));
+    curl_setopt($ch, CURLOPT_FAILONERROR, false);
+    curl_setopt($ch, CURLOPT_HEADERFUNCTION, static function ($curl, string $line) use (&$headers): int {
+        $trimmed = trim($line);
+        if ($trimmed !== '' && str_contains($trimmed, ':')) {
+            [$name, $value] = explode(':', $trimmed, 2);
+            $headers[strtolower(trim($name))] = trim($value);
+        }
+        return strlen($line);
+    });
+    $ok = curl_exec($ch);
+    $statusCode = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $contentType = (string)(curl_getinfo($ch, CURLINFO_CONTENT_TYPE) ?: 'application/octet-stream');
+    if ($ok === false) {
+        $error = curl_error($ch) ?: 'Node download failed.';
+        curl_close($ch);
+        fclose($temp);
+        return ['error' => $error];
+    }
+    curl_close($ch);
+    rewind($temp);
+    if ($statusCode >= 400) {
+        $body = stream_get_contents($temp) ?: '';
+        fclose($temp);
+        return ['error' => trim($body) !== '' ? trim($body) : 'Backup file is not available on the node yet.'];
+    }
+    $downloadName = $fileName;
+    $disposition = (string)($headers['content-disposition'] ?? '');
+    if (preg_match('/filename="([^"]+)"/i', $disposition, $match)) {
+        $downloadName = basename($match[1]);
+    }
+    rewind($temp);
+    return [
+        'stream' => $temp,
+        'content_type' => $contentType,
+        'filename' => $downloadName,
+    ];
+}
+
 function smtp_write($socket, string $command): void {
     fwrite($socket, $command . "\r\n");
 }
@@ -746,7 +898,7 @@ function queue_backup_for_client(PDO $db, int $clientId): array {
     $clientStmt = $db->prepare("SELECT email FROM clients WHERE id = ?");
     $clientStmt->execute([$clientId]);
     $email = (string)($clientStmt->fetchColumn() ?: '');
-    $stmt = $db->prepare("SELECT t.db_name, t.server_id, s.name AS server_name, s.agent_key, s.public_url FROM tenant_dbs t JOIN servers s ON s.id = t.server_id WHERE t.client_id = ? ORDER BY t.id");
+    $stmt = $db->prepare("SELECT t.id, t.db_name, t.server_id, s.name AS server_name, s.agent_key, s.public_url FROM tenant_dbs t JOIN servers s ON s.id = t.server_id WHERE t.client_id = ? ORDER BY t.id");
     $stmt->execute([$clientId]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     if (!$rows) {
@@ -757,6 +909,7 @@ function queue_backup_for_client(PDO $db, int $clientId): array {
     $firstError = '';
     $serverIds = [];
     $statuses = [];
+    $jobs = [];
     foreach ($rows as $row) {
         $backup = queue_backup($row, [(string)$row['db_name']]);
         if (isset($backup['error'])) {
@@ -770,7 +923,19 @@ function queue_backup_for_client(PDO $db, int $clientId): array {
         if (!empty($backup['file'])) {
             $latestFile = (string)$backup['file'];
         }
-        $statuses[] = backup_job_status($backup);
+        $status = backup_job_status($backup);
+        $statuses[] = $status;
+        $jobs[] = [
+            'scope' => 'tenant',
+            'target_label' => ($email !== '' ? $email : ('Tenant #' . $clientId)) . ' · ' . $row['db_name'],
+            'server_id' => (int)$row['server_id'],
+            'client_id' => $clientId,
+            'tdb_id' => (int)$row['id'],
+            'file_name' => (string)($backup['file'] ?? ''),
+            'file_path' => (string)($backup['path'] ?? ''),
+            'status' => $status,
+            'message' => ($status === 'completed' ? 'Backup completed for ' : 'Backup queued for ') . $row['db_name'] . '.',
+        ];
     }
     if ($count === 0) {
         return ['error' => $firstError !== '' ? $firstError : 'Unable to queue a backup for this tenant.'];
@@ -785,17 +950,7 @@ function queue_backup_for_client(PDO $db, int $clientId): array {
     if ($firstError !== '') {
         $message .= ' One or more databases failed to queue.';
     }
-    return ['message' => $message, 'jobs' => [[
-        'scope' => 'tenant',
-        'target_label' => $email !== '' ? $email : ('Tenant #' . $clientId),
-        'server_id' => $serverIds ? $serverIds[0] : null,
-        'client_id' => $clientId,
-        'tdb_id' => null,
-        'file_name' => $latestFile,
-        'file_path' => '',
-        'status' => $allCompleted ? 'completed' : 'queued',
-        'message' => $message,
-    ]]];
+    return ['message' => $message, 'jobs' => $jobs];
 }
 
 function queue_backup_for_server(PDO $db, int $serverId): array {
@@ -1901,6 +2056,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'restore_backup' && ($is_admin || $client_id)) {
+        $jobId = (int)($_POST['job_id'] ?? 0);
+        $returnTo = local_return_to(page_url('backups'));
+        $job = load_backup_job_for_actor($db, $jobId, $is_admin, $client_id);
+        if (!$job) {
+            flash('error', 'Backup job was not found.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        if (($job['scope'] ?? '') === 'node' && !$is_admin) {
+            flash('error', 'Only an admin can restore a full-node backup.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        if (!backup_job_can_restore($job)) {
+            flash('error', 'That backup is not ready to restore yet.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $fileName = backup_job_file_name($job);
+        $server = [
+            'public_url' => $job['public_url'],
+            'agent_key' => $job['agent_key'],
+        ];
+        $postData = ['file' => $fileName];
+        if (!empty($job['tdb_id']) && !empty($job['tenant_db_name'])) {
+            $postData['db_name'] = (string)$job['tenant_db_name'];
+        }
+        $result = call_agent($server, ['action' => 'restore_backup', 'post_data' => $postData, 'timeout' => ($job['scope'] ?? '') === 'node' ? 900 : 300]);
+        if (!isset($result['error']) && !empty($job['client_id'])) {
+            sync_client_usage($db, (int)$job['client_id']);
+            record_activity(
+                $db,
+                $is_admin ? 'admin' : 'client',
+                $client_id,
+                'backup.restored',
+                ($job['scope'] ?? '') === 'node' ? 'server' : 'database',
+                !empty($job['tdb_id']) ? (int)$job['tdb_id'] : (!empty($job['server_id']) ? (int)$job['server_id'] : null),
+                ($is_admin ? 'Administrator' : 'Tenant') . ' restored backup ' . $fileName . '.'
+            );
+        } elseif (!isset($result['error'])) {
+            record_activity(
+                $db,
+                $is_admin ? 'admin' : 'client',
+                $client_id,
+                'backup.restored',
+                ($job['scope'] ?? '') === 'node' ? 'server' : 'database',
+                !empty($job['tdb_id']) ? (int)$job['tdb_id'] : (!empty($job['server_id']) ? (int)$job['server_id'] : null),
+                ($is_admin ? 'Administrator' : 'Tenant') . ' restored backup ' . $fileName . '.'
+            );
+        }
+        flash(isset($result['error']) ? 'error' : 'message', (string)($result['error'] ?? $result['message'] ?? 'Restore request completed.'));
+        header('Location: ' . $returnTo);
+        exit;
+    }
+
     if ($action === 'download_db_env' && ($is_admin || $client_id)) {
         $tdbId = (int)($_POST['tdb_id'] ?? 0);
         $returnTo = local_return_to($client_id ? page_url('client') : page_url('databases'));
@@ -1969,6 +2180,50 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     }
     session_destroy();
     header('Location: ?');
+    exit;
+}
+
+if (isset($_GET['action']) && $_GET['action'] === 'download_backup') {
+    if (!$is_admin && !$client_id) {
+        http_response_code(403);
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo 'Authentication required.';
+        exit;
+    }
+    $db = hub_db();
+    $job = load_backup_job_for_actor($db, (int)($_GET['job_id'] ?? 0), $is_admin, $client_id);
+    if (!$job || !backup_job_can_download($job)) {
+        http_response_code(404);
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo 'Backup file is not available.';
+        exit;
+    }
+    $fileName = backup_job_file_name($job);
+    $download = fetch_agent_backup([
+        'public_url' => $job['public_url'],
+        'agent_key' => $job['agent_key'],
+    ], $fileName, 600);
+    if (isset($download['error'])) {
+        http_response_code(502);
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo (string)$download['error'];
+        exit;
+    }
+    record_activity(
+        $db,
+        $is_admin ? 'admin' : 'client',
+        $client_id,
+        'backup.downloaded',
+        !empty($job['tdb_id']) ? 'database' : 'backup',
+        !empty($job['tdb_id']) ? (int)$job['tdb_id'] : (int)$job['id'],
+        ($is_admin ? 'Administrator' : 'Tenant') . ' downloaded backup ' . $fileName . '.'
+    );
+    header('Content-Type: ' . (string)($download['content_type'] ?? 'application/octet-stream'));
+    header('Content-Disposition: attachment; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($download['filename'] ?? $fileName)) . '"');
+    header('Cache-Control: private, no-store');
+    $stream = $download['stream'];
+    fpassthru($stream);
+    fclose($stream);
     exit;
 }
 
@@ -2098,7 +2353,7 @@ if ($databaseId > 0 && ($is_admin || $client_id)) {
     if ($databaseDetail) {
         $backupsStmt = $db->prepare("SELECT * FROM backup_jobs WHERE tdb_id = ? ORDER BY id DESC LIMIT 8");
         $backupsStmt->execute([$databaseId]);
-        $databaseBackups = $backupsStmt->fetchAll(PDO::FETCH_ASSOC);
+        $databaseBackups = sync_backup_job_collection($db, $backupsStmt->fetchAll(PDO::FETCH_ASSOC));
         $eventsStmt = $db->prepare("SELECT * FROM activity_log WHERE entity_type = 'database' AND entity_id = ? ORDER BY id DESC LIMIT 8");
         $eventsStmt->execute([$databaseId]);
         $databaseEvents = $eventsStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2136,7 +2391,7 @@ if ($backupWhere) {
 $backupSql .= ' ORDER BY b.id DESC LIMIT 30';
 $backupStmt = $db->prepare($backupSql);
 $backupStmt->execute($backupParams);
-$backupJobs = $backupStmt->fetchAll(PDO::FETCH_ASSOC);
+$backupJobs = sync_backup_job_collection($db, $backupStmt->fetchAll(PDO::FETCH_ASSOC));
 
 $activityWhere = [];
 $activityParams = [];
