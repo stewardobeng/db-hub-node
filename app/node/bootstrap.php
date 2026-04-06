@@ -89,27 +89,31 @@ clouddb_define('APP_NAME', 'CloudDB Node');
 clouddb_define('API_KEY', 'local-node-key');
 clouddb_define('PROV_USER', 'root');
 clouddb_define('PROV_PASS', '');
-clouddb_define('BACKUP_DIR', $backupDir);
-clouddb_define(
-    'BACKUP_SCRIPT',
-    clouddb_resolve_path(
-        clouddb_env('BACKUP_SCRIPT', 'bin/backup-engine.sh') ?? 'bin/backup-engine.sh',
-        __DIR__
-    )
+if (!defined('BACKUP_DIR')) {
+    define('BACKUP_DIR', $backupDir);
+}
+$backupScriptRef = clouddb_env('BACKUP_SCRIPT', 'bin/backup-engine.sh') ?? 'bin/backup-engine.sh';
+if (DIRECTORY_SEPARATOR === '\\' && preg_match('/\.sh$/i', $backupScriptRef)) {
+    $backupScriptRef = 'bin/backup-engine.php';
+}
+$backupScript = clouddb_resolve_path($backupScriptRef, __DIR__);
+if (!defined('BACKUP_SCRIPT')) {
+    define('BACKUP_SCRIPT', $backupScript);
+}
+$backupDbCnf = clouddb_resolve_path(
+    clouddb_env('BACKUP_DB_CNF', 'storage/backup-mysql.cnf') ?? 'storage/backup-mysql.cnf',
+    __DIR__
 );
-clouddb_define(
-    'BACKUP_DB_CNF',
-    clouddb_resolve_path(
-        clouddb_env('BACKUP_DB_CNF', 'storage/backup-mysql.cnf') ?? 'storage/backup-mysql.cnf',
-        __DIR__
-    )
+if (!defined('BACKUP_DB_CNF')) {
+    define('BACKUP_DB_CNF', $backupDbCnf);
+}
+$backupLog = clouddb_resolve_path(
+    clouddb_env('BACKUP_LOG', 'storage/backup.log') ?? 'storage/backup.log',
+    __DIR__
 );
-clouddb_define(
-    'BACKUP_LOG',
-    clouddb_resolve_path(
-        clouddb_env('BACKUP_LOG', 'storage/backup.log') ?? 'storage/backup.log',
-        __DIR__
-    )
-);
+if (!defined('BACKUP_LOG')) {
+    define('BACKUP_LOG', $backupLog);
+}
 clouddb_define('BACKUP_KEY', 'local-backup-key');
+clouddb_define('MYSQLDUMP_BIN', clouddb_env('MYSQLDUMP_BIN', '') ?? '');
 clouddb_define('NODE_DB_DSN', 'mysql:host=localhost;dbname=information_schema');

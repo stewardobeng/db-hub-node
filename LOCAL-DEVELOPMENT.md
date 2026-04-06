@@ -27,13 +27,23 @@ D:\xampp\php\php.exe -r "echo password_hash('ChangeMe123!', PASSWORD_DEFAULT), P
 ## Local URLs
 
 - Hub: `http://localhost/db-platform-package/app/hub/public/`
-- Node: `http://localhost/db-platform-package/app/node/public/agent.php?action=stats&key=YOUR_API_KEY`
+- Node agent: `http://localhost/db-platform-package/agent-api/agent.php?action=stats&key=YOUR_API_KEY`
+- phpMyAdmin shortcut: `http://localhost/db-platform-package/phpmyadmin/`
 
 ## Local Behavior
 
 - The Hub uses SQLite by default at `app/hub/storage/hub_v5.sqlite`.
 - The Node expects a reachable MariaDB server through `NODE_DB_DSN`, `PROV_USER`, and `PROV_PASS`.
-- The Node backup engine exists in `app/node/bin/backup-engine.sh`, but scheduled backups, Apache aliasing, Certbot, phpMyAdmin installation, and firewall rules are still deployment-time concerns handled by the Ubuntu installers.
+- The repo includes `agent-api/agent.php` as a local compatibility route so the Hub can keep calling `/agent-api/agent.php`.
+- The repo includes `phpmyadmin/index.php` as a local redirect stub for your XAMPP phpMyAdmin install.
+- Windows and XAMPP use `app/node/bin/backup-engine.php` for local backup testing.
+- Linux deployments still use the shell engine configured by `install-db-node.sh`.
+- Scheduled backups, Apache aliasing, Certbot, phpMyAdmin installation, and firewall rules are still deployment-time concerns handled by the Ubuntu installers.
+
+## MFA
+
+- Admins and tenants can enable passkeys, authenticator app codes, and email verification from `Settings`.
+- Passkeys work on `localhost` and HTTPS origins. On live deployments, use HTTPS for passkey support.
 
 ## Optional Apache VHosts
 

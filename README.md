@@ -12,6 +12,7 @@ The Hub manages tenants and Nodes. Each Node runs the actual MariaDB workloads.
 - Admin Node add, edit, delete, health check, and full-node backup from the Hub UI.
 - Admin tenant create, edit, delete, provision, and tenant backup from the Hub UI.
 - Client signup, login, self-service database provisioning, IP whitelist management, and per-database backup from the client UI.
+- Multi-factor authentication for admin and tenant accounts with passkeys, authenticator codes, and email codes.
 - Downloaded tenant `.env` files now include `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD`.
 - phpMyAdmin is exposed per Node, its configuration storage is initialized automatically, and internal schemas are hidden from the tenant navigation tree.
 - Automatic encrypted daily Node backups with optional `rclone` sync.
@@ -70,13 +71,16 @@ D:\xampp\php\php.exe -r "echo password_hash('ChangeMe123!', PASSWORD_DEFAULT), P
 
 5. Put that hash into `app/hub/.env` as `ADMIN_HASH=...`.
 6. Open the Hub locally at `http://localhost/db-platform-package/app/hub/public/`.
-7. Test the Node agent locally at `http://localhost/db-platform-package/app/node/public/agent.php?action=stats&key=YOUR_API_KEY`.
+7. Test the Node agent locally at `http://localhost/db-platform-package/agent-api/agent.php?action=stats&key=YOUR_API_KEY`.
 
 Local notes:
 
 - The Hub uses SQLite locally by default through `app/hub/storage/hub_v5.sqlite`.
 - The Node expects MariaDB credentials in `app/node/.env`.
-- Backup UI can be previewed locally, but the full backup engine still depends on Linux-side dump tooling and cron when you deploy to a real Node.
+- The repo includes a local compatibility route at `agent-api/agent.php` so the Hub can call the Node with the same `/agent-api/agent.php` path it uses in production.
+- The repo includes `phpmyadmin/index.php` as a local redirect stub so the Hub can open your local phpMyAdmin install from the same base URL.
+- Windows and XAMPP use `app/node/bin/backup-engine.php` for local backup testing. Linux deployments still use the shell engine installed by `install-db-node.sh`.
+- Scheduled backups, Apache aliasing, Certbot, phpMyAdmin installation, and firewall rules still remain deployment-time concerns handled by the Ubuntu installers.
 
 For the exact local file layout and URL examples, see [LOCAL-DEVELOPMENT.md](/D:/xampp/htdocs/db-platform-package/LOCAL-DEVELOPMENT.md).
 
@@ -157,6 +161,7 @@ Deletion safeguards:
 Clients can:
 
 - Sign up or log in.
+- Enable or disable passkeys, authenticator app codes, and email 2FA from Settings.
 - Provision databases until their package limit is reached.
 - Download the generated `.env` file.
 - Open phpMyAdmin on the assigned Node.
@@ -193,6 +198,12 @@ Node backup engine notes:
 - Log file: `/var/log/clouddb-backup.log`
 - Retention: 30 days by default
 - Future R2 support can be added through the existing `rclone` sync target instead of redesigning the backup flow again.
+
+Local backup engine notes:
+
+- Windows/XAMPP dev uses `app/node/bin/backup-engine.php`.
+- Local backup output is written under `app/node/storage/backups`.
+- The local engine encrypts and compresses dumps so backup testing works before you deploy to Ubuntu.
 
 ## Restore A Backup
 

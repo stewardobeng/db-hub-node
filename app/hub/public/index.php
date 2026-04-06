@@ -142,6 +142,7 @@ function hub_db(): PDO {
     $pdo->exec("CREATE TABLE IF NOT EXISTS security_log (ip TEXT UNIQUE, attempts INTEGER DEFAULT 0, last_attempt DATETIME)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS backup_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT, target_label TEXT, requested_by_role TEXT, requested_by_id INTEGER, server_id INTEGER, client_id INTEGER, tdb_id INTEGER, file_name TEXT, file_path TEXT, status TEXT DEFAULT 'queued', message TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_role TEXT, actor_id INTEGER, event_type TEXT, entity_type TEXT, entity_id INTEGER, message TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS mfa_methods (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_role TEXT NOT NULL, actor_id INTEGER NOT NULL, method_type TEXT NOT NULL, label TEXT NOT NULL, secret_cipher TEXT DEFAULT '', email_cipher TEXT DEFAULT '', credential_id TEXT DEFAULT '', credential_public_key TEXT DEFAULT '', sign_count INTEGER DEFAULT 0, transports TEXT DEFAULT '[]', enabled INTEGER DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, last_used_at DATETIME)");
     try {
         $pdo->exec("ALTER TABLE servers ADD COLUMN pma_alias TEXT DEFAULT 'phpmyadmin'");
     } catch (Throwable $e) {
@@ -188,6 +189,50 @@ function resolve_client_expiry(array $package, string $status, string $value): ?
         return date('Y-m-d H:i:s', time() - 60);
     }
     return null;
+}
+
+function client_usage_snapshot(PDO $db, int $clientId): array {
+    $stmt = $db->prepare("SELECT COUNT(*) AS db_count, COALESCE(SUM(last_size_mb), 0) AS usage_mb FROM tenant_dbs WHERE client_id = ?");
+    $stmt->execute([$clientId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['db_count' => 0, 'usage_mb' => 0];
+    return [
+        'db_count' => (int)($row['db_count'] ?? 0),
+        'usage_mb' => (float)($row['usage_mb'] ?? 0),
+    ];
+}
+
+function package_change_direction(?array $currentPackage, array $targetPackage): string {
+    if (!$currentPackage) {
+        return 'change';
+    }
+    $currentPrice = (float)($currentPackage['price'] ?? 0);
+    $targetPrice = (float)($targetPackage['price'] ?? 0);
+    if ($targetPrice > $currentPrice) {
+        return 'upgrade';
+    }
+    if ($targetPrice < $currentPrice) {
+        return 'downgrade';
+    }
+    return 'change';
+}
+
+function package_fit_error(array $package, int $dbCount, float $usageMb): string {
+    if ($dbCount > (int)($package['db_limit'] ?? 0)) {
+        return 'Reduce your databases before switching to that plan.';
+    }
+    if ($usageMb > ((float)($package['disk_quota_gb'] ?? 0) * 1024)) {
+        return 'Reduce storage usage before switching to that plan.';
+    }
+    return '';
+}
+
+function package_change_expiry(array $client, array $package): string {
+    $currentExpiry = (string)($client['expires_at'] ?? '');
+    $currentTs = $currentExpiry !== '' ? strtotime($currentExpiry) : false;
+    if (is_client_active($client) && $currentTs !== false && $currentTs > time()) {
+        return date('Y-m-d H:i:s', $currentTs);
+    }
+    return date('Y-m-d H:i:s', strtotime('+' . ((int)($package['duration_days'] ?: 30)) . ' days'));
 }
 
 function load_package(PDO $db, int $packageId): ?array {
@@ -345,7 +390,7 @@ function paystack_enabled(): bool {
     return PAYSTACK_SECRET !== '';
 }
 
-function paystack_initialize(array $package, string $email): array {
+function paystack_initialize(array $package, string $email, array $options = []): array {
     if (!paystack_enabled()) {
         return ['error' => 'Billing provider is not configured.'];
     }
@@ -353,12 +398,16 @@ function paystack_initialize(array $package, string $email): array {
     if ($amount <= 0) {
         return ['authorization_url' => ''];
     }
+    $metadata = ['package_id' => (int)$package['id']];
+    if (isset($options['metadata']) && is_array($options['metadata'])) {
+        $metadata = array_merge($metadata, $options['metadata']);
+    }
     $payload = json_encode([
         'email' => $email,
         'amount' => $amount,
         'currency' => PAYSTACK_CURRENCY,
-        'callback_url' => app_url(['view' => 'login', 'payment' => 'pending']),
-        'metadata' => ['package_id' => (int)$package['id']],
+        'callback_url' => (string)($options['callback_url'] ?? app_url(['view' => 'login', 'payment' => 'pending'])),
+        'metadata' => $metadata,
     ]);
     $ch = curl_init('https://api.paystack.co/transaction/initialize');
     curl_setopt_array($ch, [
@@ -420,6 +469,137 @@ function decrypt_secret(?string $cipherText): string {
     $cipher = substr($raw, 16);
     $plain = openssl_decrypt($cipher, 'AES-256-CBC', cipher_key(), OPENSSL_RAW_DATA, $iv);
     return $plain === false ? '' : $plain;
+}
+
+require dirname(__DIR__) . DIRECTORY_SEPARATOR . 'mfa.php';
+
+function mfa_pending_context(): ?array {
+    $context = $_SESSION['pending_auth'] ?? null;
+    if (!is_array($context)) {
+        return null;
+    }
+    if ((int)($context['expires_at'] ?? 0) < time()) {
+        unset($_SESSION['pending_auth']);
+        return null;
+    }
+    return $context;
+}
+
+function mfa_store_pending_context(string $role, int $actorId, string $identifier): void {
+    unset($_SESSION['role'], $_SESSION['client_id']);
+    $_SESSION['pending_auth'] = [
+        'role' => $role,
+        'actor_id' => mfa_actor_id($role, $actorId),
+        'identifier' => $identifier,
+        'expires_at' => time() + 600,
+        'email_code_hash' => '',
+        'email_code_expires' => 0,
+        'email_method_id' => 0,
+        'passkey_challenge' => '',
+    ];
+}
+
+function mfa_clear_pending_context(): void {
+    unset($_SESSION['pending_auth']);
+}
+
+function finish_authenticated_session(string $role, int $actorId): void {
+    session_regenerate_id(true);
+    mfa_clear_pending_context();
+    if ($role === 'admin') {
+        $_SESSION['role'] = 'admin';
+        unset($_SESSION['client_id']);
+        return;
+    }
+    unset($_SESSION['role']);
+    $_SESSION['client_id'] = $actorId;
+}
+
+function actor_profile(PDO $db, string $role, int $actorId): ?array {
+    if ($role === 'admin') {
+        return [
+            'role' => 'admin',
+            'actor_id' => 0,
+            'identifier' => ADMIN_USER,
+            'email' => ADMIN_EMAIL,
+            'status' => 'active',
+        ];
+    }
+    $stmt = $db->prepare("SELECT * FROM clients WHERE id = ?");
+    $stmt->execute([$actorId]);
+    $client = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$client) {
+        return null;
+    }
+    return [
+        'role' => 'client',
+        'actor_id' => (int)$client['id'],
+        'identifier' => (string)$client['email'],
+        'email' => (string)$client['email'],
+        'status' => (string)($client['status'] ?? 'pending'),
+    ];
+}
+
+function mfa_email_target(array $method, string $fallback = ''): string {
+    $stored = decrypt_secret((string)($method['email_cipher'] ?? ''));
+    return $stored !== '' ? $stored : $fallback;
+}
+
+function mfa_mark_method_used(PDO $db, int $methodId, ?int $signCount = null): void {
+    if ($signCount === null) {
+        $db->prepare("UPDATE mfa_methods SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?")->execute([$methodId]);
+        return;
+    }
+    $db->prepare("UPDATE mfa_methods SET last_used_at = CURRENT_TIMESTAMP, sign_count = ? WHERE id = ?")->execute([$signCount, $methodId]);
+}
+
+function mfa_upsert_single_method(PDO $db, string $role, int $actorId, string $type, string $label, string $secretCipher = '', string $emailCipher = ''): int {
+    $actorId = mfa_actor_id($role, $actorId);
+    $existingStmt = $db->prepare("SELECT id FROM mfa_methods WHERE actor_role = ? AND actor_id = ? AND method_type = ? ORDER BY id DESC LIMIT 1");
+    $existingStmt->execute([$role, $actorId, $type]);
+    $existingId = (int)($existingStmt->fetchColumn() ?: 0);
+    if ($existingId > 0) {
+        $db->prepare("UPDATE mfa_methods SET label = ?, secret_cipher = ?, email_cipher = ?, enabled = 1, last_used_at = NULL WHERE id = ?")->execute([$label, $secretCipher, $emailCipher, $existingId]);
+        return $existingId;
+    }
+    $db->prepare("INSERT INTO mfa_methods (actor_role, actor_id, method_type, label, secret_cipher, email_cipher, enabled) VALUES (?,?,?,?,?,?,1)")->execute([$role, $actorId, $type, $label, $secretCipher, $emailCipher]);
+    return (int)$db->lastInsertId();
+}
+
+function mfa_totp_setup_state(): ?array {
+    $setup = $_SESSION['mfa_totp_setup'] ?? null;
+    if (!is_array($setup)) {
+        return null;
+    }
+    if ((int)($setup['expires_at'] ?? 0) < time()) {
+        unset($_SESSION['mfa_totp_setup']);
+        return null;
+    }
+    return $setup;
+}
+
+function mfa_email_setup_state(): ?array {
+    $setup = $_SESSION['mfa_email_setup'] ?? null;
+    if (!is_array($setup)) {
+        return null;
+    }
+    if ((int)($setup['expires_at'] ?? 0) < time()) {
+        unset($_SESSION['mfa_email_setup']);
+        return null;
+    }
+    return $setup;
+}
+
+function mfa_passkey_setup_state(): ?array {
+    $setup = $_SESSION['mfa_passkey_register'] ?? null;
+    if (!is_array($setup)) {
+        return null;
+    }
+    if ((int)($setup['expires_at'] ?? 0) < time()) {
+        unset($_SESSION['mfa_passkey_register']);
+        return null;
+    }
+    return $setup;
 }
 
 function env_value(string $content, string $key): string {
@@ -523,6 +703,10 @@ function queue_backup(array $server, array $dbNames = []): array {
     return call_agent($server, ['action' => 'trigger_backup', 'post_data' => $postData, 'timeout' => 15]);
 }
 
+function backup_job_status(array $backup): string {
+    return (($backup['pid'] ?? '') === 'sync' && !empty($backup['file'])) ? 'completed' : 'queued';
+}
+
 function queue_backup_for_database(PDO $db, int $tdbId, ?int $clientId = null): array {
     $sql = "SELECT t.id, t.db_name, t.client_id, t.server_id, s.name AS server_name, s.agent_key, s.public_url FROM tenant_dbs t JOIN servers s ON s.id = t.server_id WHERE t.id = ?";
     $params = [$tdbId];
@@ -540,7 +724,8 @@ function queue_backup_for_database(PDO $db, int $tdbId, ?int $clientId = null): 
     if (isset($backup['error'])) {
         return ['error' => (string)$backup['error']];
     }
-    $message = 'Backup queued for ' . $row['db_name'] . ' on ' . $row['server_name'] . '.';
+    $status = backup_job_status($backup);
+    $message = ($status === 'completed' ? 'Backup completed for ' : 'Backup queued for ') . $row['db_name'] . ' on ' . $row['server_name'] . '.';
     if (!empty($backup['file'])) {
         $message .= ' File: ' . $backup['file'];
     }
@@ -552,7 +737,7 @@ function queue_backup_for_database(PDO $db, int $tdbId, ?int $clientId = null): 
         'tdb_id' => (int)$row['id'],
         'file_name' => (string)($backup['file'] ?? ''),
         'file_path' => (string)($backup['path'] ?? ''),
-        'status' => 'queued',
+        'status' => $status,
         'message' => $message,
     ]]];
 }
@@ -571,6 +756,7 @@ function queue_backup_for_client(PDO $db, int $clientId): array {
     $latestFile = '';
     $firstError = '';
     $serverIds = [];
+    $statuses = [];
     foreach ($rows as $row) {
         $backup = queue_backup($row, [(string)$row['db_name']]);
         if (isset($backup['error'])) {
@@ -584,11 +770,15 @@ function queue_backup_for_client(PDO $db, int $clientId): array {
         if (!empty($backup['file'])) {
             $latestFile = (string)$backup['file'];
         }
+        $statuses[] = backup_job_status($backup);
     }
     if ($count === 0) {
         return ['error' => $firstError !== '' ? $firstError : 'Unable to queue a backup for this tenant.'];
     }
-    $message = $count === 1 ? 'Backup queued for 1 database.' : "Backup queued for {$count} databases.";
+    $allCompleted = !empty($statuses) && count(array_unique($statuses)) === 1 && $statuses[0] === 'completed';
+    $message = $count === 1
+        ? ($allCompleted ? 'Backup completed for 1 database.' : 'Backup queued for 1 database.')
+        : ($allCompleted ? "Backup completed for {$count} databases." : "Backup queued for {$count} databases.");
     if ($latestFile !== '') {
         $message .= ' Latest file: ' . $latestFile;
     }
@@ -603,7 +793,7 @@ function queue_backup_for_client(PDO $db, int $clientId): array {
         'tdb_id' => null,
         'file_name' => $latestFile,
         'file_path' => '',
-        'status' => 'queued',
+        'status' => $allCompleted ? 'completed' : 'queued',
         'message' => $message,
     ]]];
 }
@@ -619,7 +809,8 @@ function queue_backup_for_server(PDO $db, int $serverId): array {
     if (isset($backup['error'])) {
         return ['error' => (string)$backup['error']];
     }
-    $message = 'Full-node backup queued for ' . $server['name'] . '.';
+    $status = backup_job_status($backup);
+    $message = ($status === 'completed' ? 'Full-node backup completed for ' : 'Full-node backup queued for ') . $server['name'] . '.';
     if (!empty($backup['file'])) {
         $message .= ' File: ' . $backup['file'];
     }
@@ -631,7 +822,7 @@ function queue_backup_for_server(PDO $db, int $serverId): array {
         'tdb_id' => null,
         'file_name' => (string)($backup['file'] ?? ''),
         'file_path' => (string)($backup['path'] ?? ''),
-        'status' => 'queued',
+        'status' => $status,
         'message' => $message,
     ]]];
 }
@@ -664,6 +855,28 @@ function rotate_database_password(PDO $db, int $tdbId, ?int $clientId = null): a
     $password = env_value((string)($download['content'] ?? ''), 'DB_PASSWORD');
     persist_database_password($db, (int)$row['id'], $password);
     return ['message' => 'Password rotated for ' . $row['db_name'] . '.', 'download' => $download, 'database_name' => (string)$row['db_name'], 'client_id' => (int)$row['client_id'], 'tdb_id' => (int)$row['id']];
+}
+
+function delete_database_for_admin(PDO $db, int $tdbId): array {
+    $stmt = $db->prepare("SELECT t.*, c.email AS client_email, s.name AS server_name, s.agent_key, s.public_url FROM tenant_dbs t JOIN clients c ON c.id = t.client_id JOIN servers s ON s.id = t.server_id WHERE t.id = ?");
+    $stmt->execute([$tdbId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return ['error' => 'Database asset not found.'];
+    }
+    $node = call_agent($row, ['action' => 'delete', 'post_data' => ['db_name' => $row['db_name'], 'db_user' => $row['db_user']]]);
+    if (isset($node['error'])) {
+        return ['error' => (string)$node['error']];
+    }
+    $db->prepare("DELETE FROM tenant_dbs WHERE id = ?")->execute([$tdbId]);
+    return [
+        'message' => 'Database ' . $row['db_name'] . ' was deleted.',
+        'database_name' => (string)$row['db_name'],
+        'client_email' => (string)$row['client_email'],
+        'server_name' => (string)$row['server_name'],
+        'tdb_id' => $tdbId,
+        'client_id' => (int)$row['client_id'],
+    ];
 }
 
 function download_env_for_database(PDO $db, int $tdbId, ?int $clientId = null): array {
@@ -756,10 +969,10 @@ function server_health(array $server): string {
 
 function status_chip(string $status): array {
     return match ($status) {
-        'healthy', 'active', 'completed' => ['bg-tertiary-container text-on-tertiary-container', 'Healthy'],
-        'warning', 'pending', 'queued' => ['bg-secondary-container text-on-secondary-container', ucfirst($status)],
-        'expired', 'offline', 'failed', 'error' => ['bg-error-container text-on-error-container', ucfirst($status)],
-        default => ['bg-surface-container text-on-surface-variant', ucfirst($status)],
+        'healthy', 'active', 'completed' => ['bg-tertiary/10 text-tertiary', 'Healthy'],
+        'warning', 'pending', 'queued' => ['bg-secondary/10 text-secondary', ucfirst($status)],
+        'expired', 'offline', 'failed', 'error' => ['bg-error/10 text-error', ucfirst($status)],
+        default => ['bg-surface-variant/10 text-on-surface-variant', ucfirst($status)],
     };
 }
 
@@ -774,12 +987,33 @@ function activity_meta(string $eventType): array {
     };
 }
 
-function allowed_ips_text(string $json): string {
+function decode_allowed_ips(string $json): array {
     $ips = json_decode($json, true);
     if (!is_array($ips) || !$ips) {
-        return '%';
+        return ['%'];
     }
-    return implode(', ', array_map('strval', $ips));
+    return array_values(array_map('strval', $ips));
+}
+
+function allowed_ips_text(string $json): string {
+    return implode(', ', decode_allowed_ips($json));
+}
+
+function allowed_ips_textarea(string $json): string {
+    return implode("\n", decode_allowed_ips($json));
+}
+
+function parse_allowlist_input(string $value): array {
+    $parts = preg_split('/[\r\n,]+/', $value) ?: [];
+    $hosts = [];
+    foreach ($parts as $part) {
+        $part = trim($part);
+        if ($part === '') {
+            continue;
+        }
+        $hosts[] = $part;
+    }
+    return array_values(array_unique($hosts));
 }
 
 if (isset($_GET['action']) && $_GET['action'] === 'watchdog') {
@@ -808,16 +1042,27 @@ if (isset($_GET['action']) && $_GET['action'] === 'paystack_webhook') {
     $event = json_decode($input, true);
     if (is_array($event) && ($event['event'] ?? '') === 'charge.success') {
         $email = $event['data']['customer']['email'] ?? '';
-        $pkgId = (int)($event['data']['metadata']['package_id'] ?? 1);
+        $metadata = is_array($event['data']['metadata'] ?? null) ? $event['data']['metadata'] : [];
+        $pkgId = (int)($metadata['package_id'] ?? 1);
+        $flow = (string)($metadata['flow'] ?? 'signup');
         if ($email !== '') {
             $db = hub_db();
-            $pkg = $db->prepare("SELECT duration_days FROM packages WHERE id = ?");
+            $pkg = $db->prepare("SELECT name, duration_days FROM packages WHERE id = ?");
             $pkg->execute([$pkgId]);
-            $days = (int)($pkg->fetchColumn() ?: 30);
+            $pkgRow = $pkg->fetch(PDO::FETCH_ASSOC) ?: ['name' => 'selected plan', 'duration_days' => 30];
+            $days = (int)($pkgRow['duration_days'] ?? 30);
             $expiry = date('Y-m-d H:i:s', strtotime("+{$days} days"));
+            $clientStmt = $db->prepare("SELECT id FROM clients WHERE email = ?");
+            $clientStmt->execute([$email]);
+            $resolvedClientId = (int)($clientStmt->fetchColumn() ?: 0);
             $db->prepare("UPDATE clients SET package_id = ?, expires_at = ?, status = 'active' WHERE email = ?")->execute([$pkgId, $expiry, $email]);
-            record_activity($db, 'system', null, 'billing.activated', 'client', null, 'Billing activated for ' . $email . '.');
-            send_mail($email, 'Subscription active', 'Your CloudDB account is ready.');
+            if ($flow === 'plan_change') {
+                record_activity($db, 'system', null, 'billing.plan_changed', 'client', $resolvedClientId ?: null, 'Billing plan changed to ' . $pkgRow['name'] . ' for ' . $email . '.');
+                send_mail($email, 'Plan updated', 'Your CloudDB billing plan is now ' . $pkgRow['name'] . '.');
+            } else {
+                record_activity($db, 'system', null, 'billing.activated', 'client', $resolvedClientId ?: null, 'Billing activated for ' . $email . '.');
+                send_mail($email, 'Subscription active', 'Your CloudDB account is ready.');
+            }
         }
     }
     exit;
@@ -825,6 +1070,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'paystack_webhook') {
 
 if (($_GET['payment'] ?? '') === 'pending') {
     flash('message', 'Payment initiated. Your account will activate after Paystack confirms the charge.');
+}
+if (($_GET['payment'] ?? '') === 'billing_pending') {
+    flash('message', 'Payment initiated. Your billing change will apply after Paystack confirms the charge.');
 }
 
 $is_admin = isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
@@ -837,6 +1085,327 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     refresh_expired_clients($db);
     require_csrf();
     $action = (string)($_POST['action'] ?? '');
+    $currentActorRole = $is_admin ? 'admin' : ($client_id ? 'client' : '');
+    $currentActorId = $is_admin ? 0 : (int)($client_id ?? 0);
+    $currentActorProfile = $currentActorRole !== '' ? actor_profile($db, $currentActorRole, $currentActorId) : null;
+    $pendingAuth = mfa_pending_context();
+
+    if ($action === 'cancel_login_2fa') {
+        mfa_clear_pending_context();
+        flash('message', 'Two-factor sign-in cancelled.');
+        header('Location: ' . page_url('login'));
+        exit;
+    }
+
+    if ($action === 'start_totp_setup' && $currentActorRole !== '' && $currentActorProfile) {
+        $_SESSION['mfa_totp_setup'] = [
+            'role' => $currentActorRole,
+            'actor_id' => $currentActorId,
+            'secret' => mfa_generate_totp_secret(),
+            'label' => trim((string)($_POST['label'] ?? 'Authenticator app')) ?: 'Authenticator app',
+            'expires_at' => time() + 900,
+        ];
+        flash('message', 'Authenticator secret generated. Complete verification to enable it.');
+        header('Location: ' . local_return_to(page_url('settings')));
+        exit;
+    }
+
+    if ($action === 'confirm_totp_setup' && $currentActorRole !== '' && $currentActorProfile) {
+        $setup = mfa_totp_setup_state();
+        $returnTo = local_return_to(page_url('settings'));
+        if (!$setup || $setup['role'] !== $currentActorRole || (int)$setup['actor_id'] !== $currentActorId) {
+            flash('error', 'Start authenticator setup again.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $code = trim((string)($_POST['code'] ?? ''));
+        if (!mfa_verify_totp((string)$setup['secret'], $code)) {
+            flash('error', 'Authenticator code is invalid.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $methodId = mfa_upsert_single_method($db, $currentActorRole, $currentActorId, 'totp', (string)$setup['label'], encrypt_secret((string)$setup['secret']));
+        unset($_SESSION['mfa_totp_setup']);
+        record_activity($db, $currentActorRole, $currentActorId ?: null, 'mfa.enabled', 'account', $currentActorId ?: null, 'Authenticator verification enabled.');
+        mfa_mark_method_used($db, $methodId);
+        flash('message', 'Authenticator verification enabled.');
+        header('Location: ' . $returnTo);
+        exit;
+    }
+
+    if ($action === 'start_email_2fa' && $currentActorRole !== '' && $currentActorProfile) {
+        $returnTo = local_return_to(page_url('settings'));
+        $targetEmail = trim((string)($_POST['target_email'] ?? ''));
+        if ($targetEmail === '') {
+            $targetEmail = (string)($currentActorProfile['email'] ?? '');
+        }
+        if (!filter_var($targetEmail, FILTER_VALIDATE_EMAIL)) {
+            flash('error', 'Provide a valid email address for email verification.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $code = mfa_random_code();
+        $_SESSION['mfa_email_setup'] = [
+            'role' => $currentActorRole,
+            'actor_id' => $currentActorId,
+            'email' => $targetEmail,
+            'code_hash' => password_hash($code, PASSWORD_DEFAULT),
+            'expires_at' => time() + 600,
+            'label' => trim((string)($_POST['label'] ?? 'Email verification')) ?: 'Email verification',
+        ];
+        send_mail($targetEmail, 'CloudDB email verification code', 'Your CloudDB verification code is ' . $code . '. It expires in 10 minutes.');
+        flash('message', 'Verification code sent to ' . $targetEmail . '.');
+        header('Location: ' . $returnTo);
+        exit;
+    }
+
+    if ($action === 'confirm_email_2fa' && $currentActorRole !== '' && $currentActorProfile) {
+        $setup = mfa_email_setup_state();
+        $returnTo = local_return_to(page_url('settings'));
+        if (!$setup || $setup['role'] !== $currentActorRole || (int)$setup['actor_id'] !== $currentActorId) {
+            flash('error', 'Start email verification again.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $code = preg_replace('/\D+/', '', (string)($_POST['code'] ?? '')) ?? '';
+        if ($code === '' || !password_verify($code, (string)$setup['code_hash'])) {
+            flash('error', 'Email verification code is invalid.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $methodId = mfa_upsert_single_method($db, $currentActorRole, $currentActorId, 'email', (string)$setup['label'], '', encrypt_secret((string)$setup['email']));
+        unset($_SESSION['mfa_email_setup']);
+        record_activity($db, $currentActorRole, $currentActorId ?: null, 'mfa.enabled', 'account', $currentActorId ?: null, 'Email verification enabled.');
+        mfa_mark_method_used($db, $methodId);
+        flash('message', 'Email verification enabled.');
+        header('Location: ' . $returnTo);
+        exit;
+    }
+
+    if ($action === 'remove_mfa_method' && $currentActorRole !== '' && $currentActorProfile) {
+        $returnTo = local_return_to(page_url('settings'));
+        $methodId = (int)($_POST['method_id'] ?? 0);
+        $method = mfa_method_by_id($db, $methodId, $currentActorRole, $currentActorId);
+        if (!$method) {
+            flash('error', 'Two-factor method not found.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $db->prepare("DELETE FROM mfa_methods WHERE id = ?")->execute([$methodId]);
+        record_activity($db, $currentActorRole, $currentActorId ?: null, 'mfa.disabled', 'account', $currentActorId ?: null, 'Two-factor method removed: ' . $method['label'] . '.');
+        flash('message', 'Two-factor method removed.');
+        header('Location: ' . $returnTo);
+        exit;
+    }
+
+    if ($action === 'webauthn_begin_register' && $currentActorRole !== '' && $currentActorProfile) {
+        $challenge = random_bytes(32);
+        $methods = mfa_method_rows($db, $currentActorRole, $currentActorId);
+        $_SESSION['mfa_passkey_register'] = [
+            'role' => $currentActorRole,
+            'actor_id' => $currentActorId,
+            'challenge' => base64url_encode($challenge),
+            'label' => trim((string)($_POST['label'] ?? 'This device')) ?: 'This device',
+            'expires_at' => time() + 600,
+        ];
+        $exclude = [];
+        foreach (mfa_passkey_rows($methods) as $method) {
+            if (!empty($method['credential_id'])) {
+                $exclude[] = ['type' => 'public-key', 'id' => (string)$method['credential_id']];
+            }
+        }
+        mfa_json_response([
+            'challenge' => base64url_encode($challenge),
+            'rp' => ['name' => APP_NAME, 'id' => mfa_host_name()],
+            'user' => [
+                'id' => base64url_encode(mfa_user_handle($currentActorRole, $currentActorId)),
+                'name' => (string)$currentActorProfile['identifier'],
+                'displayName' => (string)$currentActorProfile['identifier'],
+            ],
+            'pubKeyCredParams' => [
+                ['type' => 'public-key', 'alg' => -7],
+                ['type' => 'public-key', 'alg' => -257],
+            ],
+            'timeout' => 60000,
+            'attestation' => 'none',
+            'authenticatorSelection' => [
+                'residentKey' => 'preferred',
+                'userVerification' => 'preferred',
+            ],
+            'excludeCredentials' => $exclude,
+        ]);
+    }
+
+    if ($action === 'webauthn_finish_register' && $currentActorRole !== '' && $currentActorProfile) {
+        $setup = mfa_passkey_setup_state();
+        if (!$setup || $setup['role'] !== $currentActorRole || (int)$setup['actor_id'] !== $currentActorId) {
+            mfa_json_response(['error' => 'Passkey registration session expired.'], 422);
+        }
+        $payload = json_decode((string)($_POST['payload'] ?? ''), true);
+        if (!is_array($payload)) {
+            mfa_json_response(['error' => 'Invalid passkey payload.'], 422);
+        }
+        try {
+            $registration = mfa_register_passkey_payload($payload, base64url_decode((string)$setup['challenge']));
+            $existing = $db->prepare("SELECT id FROM mfa_methods WHERE credential_id = ?");
+            $existing->execute([$registration['credential_id']]);
+            if ((int)($existing->fetchColumn() ?: 0) > 0) {
+                throw new RuntimeException('That passkey is already registered.');
+            }
+            $db->prepare("INSERT INTO mfa_methods (actor_role, actor_id, method_type, label, credential_id, credential_public_key, sign_count, transports, enabled) VALUES (?,?,?,?,?,?,?,?,1)")
+                ->execute([$currentActorRole, mfa_actor_id($currentActorRole, $currentActorId), 'passkey', $registration['label'], $registration['credential_id'], $registration['credential_public_key'], $registration['sign_count'], $registration['transports']]);
+            unset($_SESSION['mfa_passkey_register']);
+            record_activity($db, $currentActorRole, $currentActorId ?: null, 'mfa.enabled', 'account', $currentActorId ?: null, 'Passkey registered.');
+            mfa_json_response(['ok' => true]);
+        } catch (Throwable $e) {
+            mfa_json_response(['error' => $e->getMessage()], 422);
+        }
+    }
+
+    if ($action === 'send_login_email_code') {
+        $returnTo = page_url('login', ['step' => '2fa']);
+        if (!$pendingAuth) {
+            flash('error', 'Your sign-in challenge expired. Start again.');
+            header('Location: ' . page_url('login'));
+            exit;
+        }
+        $methods = mfa_method_rows($db, (string)$pendingAuth['role'], (int)$pendingAuth['actor_id']);
+        $emailMethod = null;
+        foreach ($methods as $method) {
+            if (($method['method_type'] ?? '') === 'email') {
+                $emailMethod = $method;
+                break;
+            }
+        }
+        if (!$emailMethod) {
+            flash('error', 'Email verification is not enabled for this account.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $profile = actor_profile($db, (string)$pendingAuth['role'], (int)$pendingAuth['actor_id']);
+        $targetEmail = mfa_email_target($emailMethod, (string)($profile['email'] ?? ''));
+        if (!filter_var($targetEmail, FILTER_VALIDATE_EMAIL)) {
+            flash('error', 'No valid email target is configured for this account.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $code = mfa_random_code();
+        $_SESSION['pending_auth']['email_code_hash'] = password_hash($code, PASSWORD_DEFAULT);
+        $_SESSION['pending_auth']['email_code_expires'] = time() + 600;
+        $_SESSION['pending_auth']['email_method_id'] = (int)$emailMethod['id'];
+        send_mail($targetEmail, 'CloudDB sign-in code', 'Your CloudDB sign-in code is ' . $code . '. It expires in 10 minutes.');
+        record_activity($db, 'system', null, 'mfa.challenge_sent', 'account', (int)$pendingAuth['actor_id'] ?: null, 'Email sign-in code sent to ' . $targetEmail . '.');
+        flash('message', 'Sign-in code sent to ' . $targetEmail . '.');
+        header('Location: ' . $returnTo);
+        exit;
+    }
+
+    if ($action === 'verify_login_email') {
+        $pendingAuth = mfa_pending_context();
+        if (!$pendingAuth) {
+            flash('error', 'Your sign-in challenge expired. Start again.');
+            header('Location: ' . page_url('login'));
+            exit;
+        }
+        $code = preg_replace('/\D+/', '', (string)($_POST['code'] ?? '')) ?? '';
+        $hash = (string)($pendingAuth['email_code_hash'] ?? '');
+        $expires = (int)($pendingAuth['email_code_expires'] ?? 0);
+        if ($hash === '' || $expires < time() || $code === '' || !password_verify($code, $hash)) {
+            flash('error', 'Email sign-in code is invalid.');
+            header('Location: ' . page_url('login', ['step' => '2fa']));
+            exit;
+        }
+        finish_authenticated_session((string)$pendingAuth['role'], (int)$pendingAuth['actor_id']);
+        if ((int)($pendingAuth['email_method_id'] ?? 0) > 0) {
+            mfa_mark_method_used($db, (int)$pendingAuth['email_method_id']);
+        }
+        record_activity($db, (string)$pendingAuth['role'], ((int)$pendingAuth['actor_id']) ?: null, 'auth.login', 'session', null, ((string)$pendingAuth['identifier']) . ' signed in.');
+        header('Location: ' . page_url((string)$pendingAuth['role'] === 'admin' ? 'overview' : 'client'));
+        exit;
+    }
+
+    if ($action === 'verify_login_totp') {
+        $pendingAuth = mfa_pending_context();
+        if (!$pendingAuth) {
+            flash('error', 'Your sign-in challenge expired. Start again.');
+            header('Location: ' . page_url('login'));
+            exit;
+        }
+        $methods = mfa_method_rows($db, (string)$pendingAuth['role'], (int)$pendingAuth['actor_id']);
+        $verifiedMethod = null;
+        $code = trim((string)($_POST['code'] ?? ''));
+        foreach ($methods as $method) {
+            if (($method['method_type'] ?? '') === 'totp' && mfa_verify_totp(decrypt_secret((string)$method['secret_cipher']), $code)) {
+                $verifiedMethod = $method;
+                break;
+            }
+        }
+        if (!$verifiedMethod) {
+            flash('error', 'Authenticator code is invalid.');
+            header('Location: ' . page_url('login', ['step' => '2fa']));
+            exit;
+        }
+        finish_authenticated_session((string)$pendingAuth['role'], (int)$pendingAuth['actor_id']);
+        mfa_mark_method_used($db, (int)$verifiedMethod['id']);
+        record_activity($db, (string)$pendingAuth['role'], ((int)$pendingAuth['actor_id']) ?: null, 'auth.login', 'session', null, ((string)$pendingAuth['identifier']) . ' signed in.');
+        header('Location: ' . page_url((string)$pendingAuth['role'] === 'admin' ? 'overview' : 'client'));
+        exit;
+    }
+
+    if ($action === 'webauthn_begin_login') {
+        $pendingAuth = mfa_pending_context();
+        if (!$pendingAuth) {
+            mfa_json_response(['error' => 'Your sign-in challenge expired.'], 422);
+        }
+        $methods = mfa_passkey_rows(mfa_method_rows($db, (string)$pendingAuth['role'], (int)$pendingAuth['actor_id']));
+        if (!$methods) {
+            mfa_json_response(['error' => 'No passkeys are registered for this account.'], 422);
+        }
+        $challenge = random_bytes(32);
+        $_SESSION['pending_auth']['passkey_challenge'] = base64url_encode($challenge);
+        mfa_json_response([
+            'challenge' => base64url_encode($challenge),
+            'rpId' => mfa_host_name(),
+            'timeout' => 60000,
+            'userVerification' => 'preferred',
+            'allowCredentials' => array_map(static fn(array $method): array => [
+                'type' => 'public-key',
+                'id' => (string)$method['credential_id'],
+                'transports' => json_decode((string)($method['transports'] ?? '[]'), true) ?: [],
+            ], $methods),
+        ]);
+    }
+
+    if ($action === 'webauthn_finish_login') {
+        $pendingAuth = mfa_pending_context();
+        if (!$pendingAuth) {
+            mfa_json_response(['error' => 'Your sign-in challenge expired.'], 422);
+        }
+        $payload = json_decode((string)($_POST['payload'] ?? ''), true);
+        if (!is_array($payload)) {
+            mfa_json_response(['error' => 'Invalid passkey response.'], 422);
+        }
+        $methods = mfa_passkey_rows(mfa_method_rows($db, (string)$pendingAuth['role'], (int)$pendingAuth['actor_id']));
+        $method = null;
+        foreach ($methods as $candidate) {
+            if (($candidate['credential_id'] ?? '') === ($payload['id'] ?? '')) {
+                $method = $candidate;
+                break;
+            }
+        }
+        if (!$method) {
+            mfa_json_response(['error' => 'Passkey credential not recognized.'], 422);
+        }
+        try {
+            $newSignCount = mfa_verify_passkey_assertion($payload, base64url_decode((string)($pendingAuth['passkey_challenge'] ?? '')), $method);
+            finish_authenticated_session((string)$pendingAuth['role'], (int)$pendingAuth['actor_id']);
+            mfa_mark_method_used($db, (int)$method['id'], $newSignCount);
+            record_activity($db, (string)$pendingAuth['role'], ((int)$pendingAuth['actor_id']) ?: null, 'auth.login', 'session', null, ((string)$pendingAuth['identifier']) . ' signed in.');
+            mfa_json_response(['ok' => true, 'redirect' => page_url((string)$pendingAuth['role'] === 'admin' ? 'overview' : 'client')]);
+        } catch (Throwable $e) {
+            mfa_json_response(['error' => $e->getMessage()], 422);
+        }
+    }
 
     if ($action === 'login') {
         $ip = client_ip();
@@ -849,9 +1418,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password = (string)($_POST['password'] ?? '');
         if ($identifier === ADMIN_USER && password_verify($password, ADMIN_HASH)) {
             clear_failed_login($db, $ip);
-            session_regenerate_id(true);
-            $_SESSION['role'] = 'admin';
-            unset($_SESSION['client_id']);
+            $adminMethods = mfa_method_rows($db, 'admin', 0);
+            if ($adminMethods) {
+                mfa_store_pending_context('admin', 0, ADMIN_USER);
+                flash('message', 'Complete two-factor verification to continue.');
+                header('Location: ' . page_url('login', ['step' => '2fa']));
+                exit;
+            }
+            finish_authenticated_session('admin', 0);
             record_activity($db, 'admin', null, 'auth.login', 'session', null, 'Administrator logged in.');
             header('Location: ' . page_url('overview'));
             exit;
@@ -864,9 +1438,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!is_client_active($client)) {
                 flash('error', ($client['status'] ?? '') === 'pending' ? 'Account pending payment.' : 'Account access has expired.');
             } else {
-                session_regenerate_id(true);
-                unset($_SESSION['role']);
-                $_SESSION['client_id'] = (int)$client['id'];
+                $clientMethods = mfa_method_rows($db, 'client', (int)$client['id']);
+                if ($clientMethods) {
+                    mfa_store_pending_context('client', (int)$client['id'], (string)$client['email']);
+                    flash('message', 'Complete two-factor verification to continue.');
+                    header('Location: ' . page_url('login', ['step' => '2fa']));
+                    exit;
+                }
+                finish_authenticated_session('client', (int)$client['id']);
                 record_activity($db, 'client', (int)$client['id'], 'auth.login', 'client', (int)$client['id'], $client['email'] . ' signed in.');
                 header('Location: ' . page_url('client'));
                 exit;
@@ -1159,6 +1738,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'change_package' && $client_id && !$is_admin) {
+        $returnTo = local_return_to(page_url('plans'));
+        $packageId = (int)($_POST['package_id'] ?? 0);
+        $clientStmt = $db->prepare("SELECT * FROM clients WHERE id = ?");
+        $clientStmt->execute([$client_id]);
+        $clientRow = $clientStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        $targetPackage = load_package($db, $packageId);
+        $currentPackage = $clientRow ? load_package($db, (int)($clientRow['package_id'] ?? 0)) : null;
+        if (!$clientRow || !$targetPackage) {
+            flash('error', 'Select a valid billing plan.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $isRenewal = (int)($clientRow['package_id'] ?? 0) === $packageId;
+        if ($isRenewal && is_client_active($clientRow)) {
+            flash('error', 'That is already your active plan.');
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $usage = client_usage_snapshot($db, $client_id);
+        $fitError = package_fit_error($targetPackage, $usage['db_count'], $usage['usage_mb']);
+        if (!$isRenewal && $fitError !== '') {
+            flash('error', $fitError);
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $requiresPayment = paystack_enabled()
+            && (float)$targetPackage['price'] > 0
+            && (!is_client_active($clientRow) || !$currentPackage || (float)$targetPackage['price'] > (float)($currentPackage['price'] ?? 0));
+        if ($requiresPayment) {
+            $checkout = paystack_initialize($targetPackage, (string)$clientRow['email'], [
+                'callback_url' => app_url(['view' => 'plans', 'payment' => 'billing_pending']),
+                'metadata' => [
+                    'flow' => 'plan_change',
+                    'client_id' => $client_id,
+                    'previous_package_id' => (int)($clientRow['package_id'] ?? 0),
+                ],
+            ]);
+            if (!empty($checkout['authorization_url'])) {
+                $fromName = $currentPackage['name'] ?? 'current plan';
+                $message = $isRenewal
+                    ? 'Billing renewal requested for ' . $targetPackage['name'] . '.'
+                    : 'Billing change requested from ' . $fromName . ' to ' . $targetPackage['name'] . '.';
+                record_activity($db, 'client', $client_id, 'billing.change_requested', 'client', $client_id, $message);
+                header('Location: ' . $checkout['authorization_url']);
+                exit;
+            }
+            flash('error', (string)($checkout['error'] ?? 'Unable to start billing.'));
+            header('Location: ' . $returnTo);
+            exit;
+        }
+        $expiry = package_change_expiry($clientRow, $targetPackage);
+        $db->prepare("UPDATE clients SET package_id = ?, expires_at = ?, status = 'active' WHERE id = ?")->execute([$packageId, $expiry, $client_id]);
+        $direction = $isRenewal ? 'renewal' : package_change_direction($currentPackage, $targetPackage);
+        $eventType = match ($direction) {
+            'upgrade' => 'billing.upgraded',
+            'downgrade' => 'billing.downgraded',
+            'renewal' => 'billing.renewed',
+            default => 'billing.plan_changed',
+        };
+        $fromName = $currentPackage['name'] ?? 'current plan';
+        $message = match ($direction) {
+            'renewal' => 'Billing renewed on ' . $targetPackage['name'] . '.',
+            default => 'Billing changed from ' . $fromName . ' to ' . $targetPackage['name'] . '.',
+        };
+        record_activity($db, 'client', $client_id, $eventType, 'client', $client_id, $message);
+        $notice = match ($direction) {
+            'upgrade' => 'Billing plan upgraded.',
+            'downgrade' => 'Billing plan downgraded.',
+            'renewal' => 'Billing plan renewed.',
+            default => 'Billing plan updated.',
+        };
+        flash('message', $notice);
+        header('Location: ' . $returnTo);
+        exit;
+    }
+
     if ($action === 'admin_provision' && $is_admin) {
         $returnTo = local_return_to(page_url('tenants'));
         $targetClient = (int)($_POST['client_id'] ?? 0);
@@ -1184,6 +1840,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             record_activity($db, 'client', $client_id, 'database.provisioned', 'database', (int)($result['tdb_id'] ?? 0), 'Database ' . ($result['database_name'] ?? 'asset') . ' was provisioned.');
         }
         flash(isset($result['error']) ? 'error' : 'message', (string)($result['error'] ?? $result['message'] ?? 'Provision request completed.'));
+        header('Location: ' . $returnTo);
+        exit;
+    }
+
+    if ($action === 'delete_database' && $is_admin) {
+        $tdbId = (int)($_POST['tdb_id'] ?? 0);
+        $returnTo = local_return_to(page_url('databases'));
+        $result = delete_database_for_admin($db, $tdbId);
+        if (!isset($result['error'])) {
+            record_activity($db, 'admin', null, 'database.deleted', 'database', $tdbId, 'Database ' . $result['database_name'] . ' owned by ' . $result['client_email'] . ' was deleted from ' . $result['server_name'] . '.');
+        }
+        flash(isset($result['error']) ? 'error' : 'message', (string)($result['error'] ?? $result['message'] ?? 'Delete request completed.'));
         header('Location: ' . $returnTo);
         exit;
     }
@@ -1276,7 +1944,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tdb = $stmt->fetch(PDO::FETCH_ASSOC);
         $returnTo = local_return_to(page_url('database', ['id' => $tdbId]));
         if ($tdb) {
-            $ips = array_values(array_filter(array_map('trim', explode(',', (string)($_POST['ips'] ?? '')))));
+            $ips = parse_allowlist_input((string)($_POST['ips'] ?? ''));
             if (!$ips) {
                 $ips = ['%'];
             }
@@ -1319,11 +1987,21 @@ refresh_expired_clients($db);
 $message = consume_flash('message');
 $error = consume_flash('error');
 $downloadReady = !empty($_SESSION['download']);
+$pendingAuth = mfa_pending_context();
+$pendingAuthProfile = $pendingAuth ? actor_profile($db, (string)$pendingAuth['role'], (int)$pendingAuth['actor_id']) : null;
+$pendingAuthMethods = $pendingAuth ? mfa_method_rows($db, (string)$pendingAuth['role'], (int)$pendingAuth['actor_id']) : [];
+$loginStep = ($pendingAuth && $pendingAuthProfile) ? 'mfa' : 'password';
 
 $publicViews = ['landing', 'login', 'signup'];
 $adminViews = ['overview', 'nodes', 'tenants', 'backups', 'plans', 'activity', 'databases', 'database', 'account', 'settings'];
 $clientViews = ['client', 'database', 'backups', 'plans', 'activity', 'account', 'settings'];
 if (!$is_admin && !$client_id && !in_array($view, $publicViews, true)) {
+    $view = $pendingAuth ? 'login' : 'landing';
+}
+if ($pendingAuth && !$is_admin && !$client_id && $view === 'login') {
+    $view = 'login';
+}
+if (!$is_admin && !$client_id && !$pendingAuth && !in_array($view, $publicViews, true)) {
     $view = 'landing';
 }
 if ($is_admin && !in_array($view, array_merge($publicViews, $adminViews), true)) {
@@ -1337,6 +2015,10 @@ $client = null;
 $clientDbCount = 0;
 $clientUsageMb = 0.0;
 $clientDatabases = [];
+$currentMfaMethods = [];
+$pendingTotpSetup = null;
+$pendingEmailSetup = null;
+$pendingPasskeySetup = null;
 if ($client_id) {
     sync_client_usage($db, $client_id);
     $clientStmt = $db->prepare("SELECT c.*, p.name AS package_name, p.db_limit, p.disk_quota_gb, p.max_conns, p.duration_days FROM clients c LEFT JOIN packages p ON c.package_id = p.id WHERE c.id = ?");
@@ -1350,6 +2032,23 @@ if ($client_id) {
     $dbsStmt = $db->prepare("SELECT t.*, s.name AS server_name, s.host, s.public_url, s.pma_alias, c.email AS client_email FROM tenant_dbs t JOIN servers s ON s.id = t.server_id JOIN clients c ON c.id = t.client_id WHERE t.client_id = ? ORDER BY t.id DESC");
     $dbsStmt->execute([$client_id]);
     $clientDatabases = $dbsStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+if ($is_admin || $client_id) {
+    $actorRole = $is_admin ? 'admin' : 'client';
+    $actorId = $is_admin ? 0 : $client_id;
+    $currentMfaMethods = mfa_method_rows($db, $actorRole, (int)$actorId);
+    $pendingTotpSetup = mfa_totp_setup_state();
+    if ($pendingTotpSetup && ($pendingTotpSetup['role'] !== $actorRole || (int)$pendingTotpSetup['actor_id'] !== (int)$actorId)) {
+        $pendingTotpSetup = null;
+    }
+    $pendingEmailSetup = mfa_email_setup_state();
+    if ($pendingEmailSetup && ($pendingEmailSetup['role'] !== $actorRole || (int)$pendingEmailSetup['actor_id'] !== (int)$actorId)) {
+        $pendingEmailSetup = null;
+    }
+    $pendingPasskeySetup = mfa_passkey_setup_state();
+    if ($pendingPasskeySetup && ($pendingPasskeySetup['role'] !== $actorRole || (int)$pendingPasskeySetup['actor_id'] !== (int)$actorId)) {
+        $pendingPasskeySetup = null;
+    }
 }
 
 $servers = $db->query("SELECT s.*, COUNT(t.id) AS db_count FROM servers s LEFT JOIN tenant_dbs t ON t.server_id = s.id GROUP BY s.id ORDER BY s.name")->fetchAll(PDO::FETCH_ASSOC);
@@ -1473,6 +2172,12 @@ foreach ($planUsageStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 $planActivityStmt = $db->prepare("SELECT * FROM activity_log WHERE entity_type = 'package' ORDER BY id DESC LIMIT 10");
 $planActivityStmt->execute();
 $planActivity = $planActivityStmt->fetchAll(PDO::FETCH_ASSOC);
+$billingActivity = [];
+if ($client_id && !$is_admin) {
+    $billingActivityStmt = $db->prepare("SELECT * FROM activity_log WHERE ((actor_role = 'client' AND actor_id = ?) OR (entity_type = 'client' AND entity_id = ?)) AND event_type LIKE 'billing.%' ORDER BY id DESC LIMIT 10");
+    $billingActivityStmt->execute([$client_id, $client_id]);
+    $billingActivity = $billingActivityStmt->fetchAll(PDO::FETCH_ASSOC);
+}
 
 $serverTotals = ['healthy' => 0, 'warning' => 0, 'offline' => 0];
 foreach ($servers as $server) {
@@ -1546,7 +2251,7 @@ $documentTitle = match ($view) {
     'nodes' => 'Nodes | CloudDB',
     'tenants' => 'Tenants | CloudDB',
     'backups' => 'Backups Center | CloudDB',
-    'plans' => 'Service Tiers | CloudDB',
+    'plans' => ($is_admin ? 'Service Tiers' : 'Billing') . ' | CloudDB',
     'activity' => 'Audit Trail | CloudDB',
     'databases' => 'Databases | CloudDB',
     'database' => ($databaseDetail['db_name'] ?? 'Database') . ' | CloudDB',
@@ -1575,6 +2280,7 @@ if ($view === 'signup') {
 $topSearchPlaceholder = match ($view) {
     'activity' => 'Search events, actors, or assets...',
     'backups' => 'Search backup requests...',
+    'plans' => $is_admin ? 'Search plans...' : 'Search billing...',
     'tenants' => 'Search tenants...',
     'nodes' => 'Search nodes...',
     default => 'Search infrastructure...',

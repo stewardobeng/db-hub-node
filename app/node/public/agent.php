@@ -16,10 +16,62 @@ function ensure_identifier(string $value, string $label): string {
     return $value;
 }
 function ensure_host_value(string $value): string {
+    $value = trim($value);
     if ($value === '%') return $value;
     if (filter_var($value, FILTER_VALIDATE_IP)) return $value;
-    if (preg_match('/^[A-Za-z0-9._:%-]{1,255}$/', $value)) return $value;
+    if (preg_match('/^[A-Za-z0-9._%-]{1,255}$/', $value)) return $value;
     throw new InvalidArgumentException('Host value is invalid.');
+}
+function ipv4_to_unsigned_long(string $ip): int {
+    $value = ip2long($ip);
+    if ($value === false) {
+        throw new InvalidArgumentException('Host value is invalid.');
+    }
+    return (int)sprintf('%u', $value);
+}
+function expand_host_value(string $value): array {
+    $value = trim($value);
+    if (!preg_match('/^([^\/]+)\/(\d{1,3})$/', $value, $match)) {
+        return [ensure_host_value($value)];
+    }
+    $ip = trim($match[1]);
+    $mask = (int)$match[2];
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+        if ($mask === 128) {
+            return [$ip];
+        }
+        throw new InvalidArgumentException('IPv6 CIDR ranges are not supported in access allowlists yet.');
+    }
+    if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) || $mask < 0 || $mask > 32) {
+        throw new InvalidArgumentException('Host value is invalid.');
+    }
+    if ($mask === 0) {
+        return ['%'];
+    }
+    $hostCount = (int)(2 ** (32 - $mask));
+    if ($hostCount > 256) {
+        throw new InvalidArgumentException('CIDR ranges wider than /24 are not supported. Use /24 or narrower.');
+    }
+    $maskBits = $mask === 32 ? 0xFFFFFFFF : ((0xFFFFFFFF << (32 - $mask)) & 0xFFFFFFFF);
+    $network = ipv4_to_unsigned_long($ip) & $maskBits;
+    $hosts = [];
+    for ($offset = 0; $offset < $hostCount; $offset++) {
+        $hosts[] = long2ip($network + $offset);
+    }
+    return $hosts;
+}
+function normalize_allowlist_hosts(array $values): array {
+    $hosts = [];
+    foreach ($values as $value) {
+        foreach (expand_host_value((string)$value) as $host) {
+            $hosts[] = $host;
+        }
+    }
+    $hosts = array_values(array_unique($hosts));
+    if (in_array('%', $hosts, true)) {
+        return ['%'];
+    }
+    return $hosts;
 }
 function sql_ident(string $value): string {
     return '`' . str_replace('`', '``', $value) . '`';
@@ -38,8 +90,75 @@ function drop_remote_user_hosts(PDO $pdo, string $user): void {
         $pdo->exec("DROP USER IF EXISTS " . quoted_user_host($pdo, $user, (string)$host));
     }
 }
+function cpu_usage_percent(): int {
+    if (!function_exists('sys_getloadavg')) {
+        return 0;
+    }
+    $loads = sys_getloadavg();
+    $load = is_array($loads) ? (float)($loads[0] ?? 0) : 0.0;
+    $cpuCount = 1;
+    $nproc = trim((string)@shell_exec('nproc 2>/dev/null'));
+    if (ctype_digit($nproc) && (int)$nproc > 0) {
+        $cpuCount = (int)$nproc;
+    }
+    return max(0, min(100, (int)round(($load / $cpuCount) * 100)));
+}
+function backup_script_ready(): bool {
+    if (!is_file(BACKUP_SCRIPT)) {
+        return false;
+    }
+    if (preg_match('/\.php$/i', BACKUP_SCRIPT)) {
+        return is_readable(BACKUP_SCRIPT);
+    }
+    return is_executable(BACKUP_SCRIPT);
+}
+function resolve_php_cli_binary(): string {
+    $candidates = [];
+    if (PHP_BINARY !== '') {
+        $candidates[] = PHP_BINARY;
+        $candidates[] = dirname(PHP_BINARY) . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'php' . DIRECTORY_SEPARATOR . 'php.exe';
+        $candidates[] = dirname(PHP_BINARY) . DIRECTORY_SEPARATOR . 'php.exe';
+    }
+    $candidates[] = 'php';
+    foreach ($candidates as $candidate) {
+        $candidate = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $candidate);
+        if (preg_match('/^(?:[A-Za-z]:[\\\\\\/]|[\\\\\\/])/', $candidate) === 1) {
+            $base = strtolower(basename($candidate));
+            if (is_file($candidate) && str_starts_with($base, 'php')) {
+                return $candidate;
+            }
+            continue;
+        }
+        return $candidate;
+    }
+    return 'php';
+}
+function run_php_backup_script(string $file, array $dbNames): array {
+    $phpBinary = resolve_php_cli_binary();
+    $command = array_merge([$phpBinary, BACKUP_SCRIPT], $dbNames);
+    $descriptors = [
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+    $env = array_merge($_ENV, $_SERVER, [
+        'BACKUP_FILE' => $file,
+    ]);
+    $process = proc_open($command, $descriptors, $pipes, dirname(BACKUP_SCRIPT), $env, ['bypass_shell' => true]);
+    if (!is_resource($process)) {
+        throw new RuntimeException('CloudDB backup engine could not be started.');
+    }
+    $stdout = stream_get_contents($pipes[1]) ?: '';
+    fclose($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]) ?: '';
+    fclose($pipes[2]);
+    $exitCode = proc_close($process);
+    if ($exitCode !== 0) {
+        throw new RuntimeException(trim($stderr !== '' ? $stderr : ($stdout !== '' ? $stdout : 'CloudDB backup engine failed.')));
+    }
+    return ['file' => basename($file), 'path' => $file, 'pid' => 'sync'];
+}
 function queue_backup_job(array $dbNames = []): array {
-    if (!is_file(BACKUP_SCRIPT) || !is_executable(BACKUP_SCRIPT)) throw new RuntimeException('CloudDB backup engine is not installed.');
+    if (!backup_script_ready()) throw new RuntimeException('CloudDB backup engine is not installed.');
     if (!is_readable(BACKUP_DB_CNF)) throw new RuntimeException('CloudDB backup credentials are not readable.');
     if (!is_dir(BACKUP_DIR) || !is_writable(BACKUP_DIR)) throw new RuntimeException('CloudDB backup directory is not writable.');
     $cleanNames = [];
@@ -52,6 +171,9 @@ function queue_backup_job(array $dbNames = []): array {
         : 'node-full';
     $stamp = date('Ymd-His');
     $file = BACKUP_DIR . '/' . ($label ?: 'snapshot') . '-' . $stamp . '.sql.gz.enc';
+    if (preg_match('/\.php$/i', BACKUP_SCRIPT)) {
+        return run_php_backup_script($file, $cleanNames);
+    }
     $command = 'nohup env BACKUP_FILE=' . escapeshellarg($file) . ' ' . escapeshellarg(BACKUP_SCRIPT);
     foreach ($cleanNames as $dbName) {
         $command .= ' ' . escapeshellarg($dbName);
@@ -74,7 +196,7 @@ try {
             if (preg_match('/MemAvailable:\s+(\d+)/', $mem, $m)) $free = (int)$m[1];
         }
         $res = [
-            'cpu' => min(100, round((sys_getloadavg()[0] / (int)shell_exec('nproc')) * 100)),
+            'cpu' => cpu_usage_percent(),
             'ram' => $total > 0 ? round((($total - $free) / $total) * 100) : 0,
             'ram_text' => round(($total - $free)/1024/1024, 1) . 'GB / ' . round($total/1024/1024, 1) . 'GB',
             'disk' => round(((disk_total_space('/') - disk_free_space('/')) / disk_total_space('/')) * 100),
@@ -101,7 +223,7 @@ try {
         $u = ensure_identifier((string)($_POST['db_user'] ?? ''), 'Database user');
         $hosts = json_decode((string)($_POST['hosts'] ?? '[]'), true);
         if (!is_array($hosts) || !$hosts) throw new Exception("Invalid host list.");
-        $hosts = array_values(array_unique(array_map('ensure_host_value', $hosts)));
+        $hosts = normalize_allowlist_hosts($hosts);
         $p_stmt = $pdo->prepare("SELECT authentication_string FROM mysql.user WHERE User = ? AND Host = 'localhost' LIMIT 1");
         $p_stmt->execute([$u]);
         $auth_str = $p_stmt->fetchColumn();
